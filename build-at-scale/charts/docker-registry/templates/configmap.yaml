@@ -1,0 +1,11 @@
+{{- if eq .Values.global.registry.type "docker-registry" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-config
+  labels:
+    app: {{ .Chart.Name }}
+data:
+  config.yml: |-
+{{ toYaml .Values.configData | indent 4 }}
+{{- end -}}

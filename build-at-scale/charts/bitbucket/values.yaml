@@ -1,0 +1,12 @@
+replicaCount: 1
+image:  atlassian/bitbucket-server:5.12.0
+imagePullPolicy: Always
+persistence:
+  #existingClaim: "<existing-pvc-name>"
+  ontap:
+    volume: "build_at_scale_bitbucket"
+    volumeSize: "10000M"
+    volumeMountPath: "/build_at_scale_bitbucket"
+    volumeUID: 0
+    volumeGID: 0
+    volumeMountPath: "/build_at_scale_bitbucket"

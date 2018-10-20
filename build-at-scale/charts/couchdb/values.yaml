@@ -1,0 +1,13 @@
+replicaCount: 1
+image:  couchdb:2.2
+imagePullPolicy: Always
+persistence:
+  #existingClaim: "<existing-pvc-name>"
+  ontap:
+    volume: "build_at_scale_couchdb"
+    volumeSize: "10000M"
+    volumeMountPath: "/build_at_scale_couchdb"
+    volumeUID: 0
+    volumeGID: 0
+adminUser: "admin"
+adminPassword: "admin"

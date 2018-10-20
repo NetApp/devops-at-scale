@@ -1,0 +1,21 @@
+{{- if eq .Values.global.scm.type "bitbucket" -}}
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  selector:
+    app: {{ .Chart.Name }}
+  ports:
+  - name: http
+    protocol: TCP
+    port: 7990
+    targetPort: 7990
+  - name: git
+    protocol: TCP
+    port: 7999
+    targetPort: 7999
+  type: {{ .Values.global.ServiceType }}
+{{- end -}}

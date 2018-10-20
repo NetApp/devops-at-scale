@@ -1,0 +1,17 @@
+{{- if not .Values.persistence.existingClaim -}}
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "{{ .Chart.Name }}-pvc"
+  annotations:
+    volume.beta.kubernetes.io/storage-class: ""
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: "{{ .Values.persistence.ontap.volumeSize }}"
+  selector:
+    matchLabels:
+      netapp-use: "{{ .Chart.Name }}-vol"
+{{- end -}}

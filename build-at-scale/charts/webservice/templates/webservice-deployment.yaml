@@ -1,0 +1,63 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Chart.Name }}
+  name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      serviceAccountName: {{ .Chart.Name }}
+      imagePullSecrets:
+        - name: buildatscaleregcred
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+          - name: ONTAP_API
+            value: "{{ .Values.global.persistence.ontap.apiIP }}"
+          - name: ONTAP_APIUSER
+            value: "{{ .Values.global.persistence.ontap.user }}"
+          - name: ONTAP_APIPASS
+            value: "{{ .Values.global.persistence.ontap.password }}"
+          - name: ONTAP_SVM_NAME
+            value: "{{ .Values.global.persistence.ontap.svm }}"
+          - name: ONTAP_AGGR_NAME
+            value: "{{ .Values.global.persistence.ontap.aggregate }}"
+          - name: ONTAP_DATA_IP
+            value: "{{ .Values.global.persistence.ontap.dataIP }}"
+          - name: SCM_TYPE
+            value: "{{ .Values.global.scm.type }}"
+          - name: REGISTRY_TYPE
+            value: "{{ .Values.global.registry.type }}"
+          - name: SERVICE_TYPE
+            value: "{{ .Values.global.ServiceType }}"
+          ports:
+          - containerPort: 80
+            name: http
+            protocol: TCP
+          - containerPort: 6000
+            name: debug
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 180
+            failureThreshold: 50
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 200

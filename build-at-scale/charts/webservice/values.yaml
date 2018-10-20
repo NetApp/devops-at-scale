@@ -1,0 +1,3 @@
+replicaCount: 1
+image:  netapp/build-at-scale:1.0
+imagePullPolicy: Always

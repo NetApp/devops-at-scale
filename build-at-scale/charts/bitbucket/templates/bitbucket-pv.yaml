@@ -1,0 +1,18 @@
+{{- if eq .Values.global.scm.type "bitbucket" -}}
+{{- if not .Values.persistence.existingClaim -}}
+apiVersion: "v1"
+kind: "PersistentVolume"
+metadata:
+  name: "{{ .Chart.Name }}-pv"
+  labels:
+    netapp-use: "{{ .Chart.Name }}-vol"
+spec:
+  capacity:
+    storage: "{{ .Values.persistence.ontap.volumeSize }}"
+  accessModes:
+    - "ReadWriteMany"
+  nfs:
+    server: {{ .Values.global.persistence.ontap.dataIP }}
+    path: {{ .Values.persistence.ontap.volumeMountPath }}
+{{- end -}}
+{{- end -}}

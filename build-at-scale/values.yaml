@@ -1,0 +1,25 @@
+global:
+  # "LoadBalancer" or "NodePort"
+  ServiceType: NodePort
+  scm:
+    # "gitlab" or "bitbucket"
+    type: "gitlab"
+  registry:
+    # "artifactory" or "docker-registry"
+    type: "artifactory"
+  persistence:
+    ontap:
+      # If set to "true", ontap volumes for various services(E.g. gitlab/aritifactory/couchdb) will be automatically created
+      automaticVolumeCreation: true 
+      # ontap data lif IP address
+      dataIP: ""
+      # NSLM/API IP address
+      apiIP: ""
+      # NSLM/API username
+      user: ""
+      # NSLM/API password
+      password: ""
+      # ontap SVM/Vserver
+      svm: ""
+      # ontap aggregate
+      aggregate: ""

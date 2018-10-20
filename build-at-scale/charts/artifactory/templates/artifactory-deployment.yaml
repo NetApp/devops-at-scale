@@ -1,0 +1,50 @@
+{{- if eq .Values.global.registry.type "artifactory" -}}
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Chart.Name }}
+  name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          volumeMounts:
+          - name: {{ .Chart.Name }}
+            mountPath: /var/opt/jfrog/artifactory
+          ports:
+          - containerPort: 8081
+            name: http
+            protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 180
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 200
+      volumes:
+        - name: {{ .Chart.Name }}
+          persistentVolumeClaim:
+            {{- if .Values.persistence.existingClaim }}
+            claimName: "{{ .Values.persistence.existingClaim}}"
+            {{ else }}
+            claimName: "{{ .Chart.Name }}-pvc"
+            {{- end -}}
+{{- end -}}

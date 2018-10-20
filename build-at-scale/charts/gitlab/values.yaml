@@ -1,0 +1,14 @@
+replicaCount: 1
+image:  gitlab/gitlab-ce:10.7.0-rc7.ce.0
+imagePullPolicy: Always
+persistence:
+  #existingClaim: "<existing-pvc-name>"
+  ontap:
+    volume: "build_at_scale_gitlab"
+    volumeSize: "10000M"
+    volumeMountPath: "/build_at_scale_gitlab"
+    volumeUID: 0
+    volumeGID: 0
+# The AdminUser for gitlab should always be 'root'
+AdminUser: "root"
+AdminPassword: "root1234"

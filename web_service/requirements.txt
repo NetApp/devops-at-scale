@@ -1,0 +1,14 @@
+Flask
+Flask-Script
+Flask-SQLAlchemy
+Flask-Testing
+psycopg2
+requests
+kubernetes
+flasgger
+nose2
+jenkinsapi
+config
+couchdb
+flask_caching
+netapp-lib
