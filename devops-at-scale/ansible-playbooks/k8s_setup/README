@@ -1,0 +1,23 @@
+
+## Prerequisites
+One or more VMs
+
+Download roles 
+* ansible-galaxy install --roles-path roles -c geerlingguy.docker
+* ansible-galaxy install --roles-path roles -c geerlingguy.kubernetes
+
+Create inventory file
+
+    $ cat inventory 
+    [all]
+    <master_hostname kubernetes_role="master"
+    <worker_hostname> kubernetes_role="node"
+
+If more than one node, tag them appropriately.
+
+## Install docker and kubernetes
+
+ansible-playbook -i inventory -K --become-method=su --become k8s_setup_cluster.yml
+
+This will install kudeadm, kubelet, kubectl, and create a cluster.
+

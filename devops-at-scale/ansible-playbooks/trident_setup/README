@@ -1,0 +1,85 @@
+# Trident set up
+
+## Preliminary, this will need to be integrated with the vserver role
+
+## Prerequisites
+1. Kubernetes cluster.  The inventory file identifies master and worker nodes.
+2. ONTAP cluster
+
+## Preparation
+
+### Using ONTAP
+
+If the ONTAP cluster is already partially setup, the following playbook will complete the cluster setup and create a trident SVM.
+
+    ansible-playbook ontap_setup.yml --extra-vars=@ontap_vars.yml
+
+We also need a route (I assume it will be part in the verser_create role later) and to adjust permissions (I'm not sure any is the best choice):
+
+    ansible-playbook ontap_setup_extras.yml --extra-vars=@ontap_vars.yml
+
+### Trident installer
+
+#### Qualify your Kubernetes cluster
+
+    ansible-playbook -i inventory kubectl_check.yml -K --become --become-method=su --extra-vars=@vsim_vars.yml
+
+(requires root access on K8S master node to run kubectl)
+
+#### Preparation
+
+The trident_prereqs.yml playbook will install pip, setuptool, and the openshift python package.  This is required to run k8s Ansible module.
+
+This playbook will then create a "trident" **namespace**.
+
+    ansible-playbook -i inventory trident_prereqs.yml -K --become --become-method=su
+
+#### Download installer and final checks
+
+The trident.yml playbook will install the trident installer and set up a backend storage file to support trident etcd database:
+
+    ansible-playbook -i inventory trident.yml -K --become --become-method=su --extra-vars=@vsim_vars.yml
+
+(requires root access on K8S master node to run yum - and maybe k8s)
+
+The next step will be to run the trident installer.
+
+## Trident installation
+
+In the kubernetes master node:
+
+    /root/trident/trident-installer/tridentctl install -n trident --dry-run
+    /root/trident/trident-installer/tridentctl uninstall -n trident
+    /root/trident/trident-installer/tridentctl install -n trident
+
+    [root@scspa0638340001 ~]# kubectl -n trident get pods
+    NAME                       READY   STATUS    RESTARTS   AGE
+    trident-7df76c5dcb-q7htv   2/2     Running   0          78m
+
+### Check Trident is running
+
+    ansible-playbook -i inventory trident_check_pods.yml -K --become --become-method=su
+
+As of today, you should see: 2/2 Running  (1 pod is running 2 containers out of 2)
+
+## Trident configuration
+
+The backend created in the preparation step is only used to support the Trident etcd persistent storage.
+
+New backend(s) need to be created to support production.
+
+### Add backend
+
+Being lazy here, we can reuse the same backend
+
+    trident/trident-installer/tridentctl -n trident create backend -f trident/trident-installer/setup/backend.json
+
+### Add storage class
+
+Follow instructions from https://netapp-trident.readthedocs.io/en/stable-v19.04/kubernetes/operations/tasks/storage-classes.html 
+
+### Test it
+
+Create first volume and mount it into an nginx pod.
+Follow instructions from https://netapp-trident.readthedocs.io/en/stable-v19.04/kubernetes/operations/tasks/volumes.html
+

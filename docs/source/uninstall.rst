@@ -9,8 +9,8 @@ Uninstalling
 
 Build-at-Scale can be uninstalled using a single command
 
-	.. code ::
+    .. code ::
 
-		helm del --purge build-at-scale
+        helm del --purge devops-at-scale
 
-.. note :: Deleting the helm deployment does not delete the ontap volumes serving as persistent storage for the various services
+.. note:: Once all the services' PVCs are deleted, Trident deletes the associated PVs and ONTAP volumes

@@ -1,0 +1,72 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Trigger purge endpoint on regular time basis.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <jenkins.model.BuildDiscarderProperty>
+      <strategy class="hudson.tasks.LogRotator">
+        <daysToKeep>10</daysToKeep>
+        <numToKeep>-1</numToKeep>
+        <artifactDaysToKeep>-1</artifactDaysToKeep>
+        <artifactNumToKeep>-1</artifactNumToKeep>
+      </strategy>
+    </jenkins.model.BuildDiscarderProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>SERVICE_URL</name>
+          <description>Service url</description>
+          <defaultValue>{{SERVICE_URL}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SERVICE_USERNAME</name>
+          <description>Service username</description>
+          <defaultValue>{{SERVICE_USERNAME}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SERVICE_PASSWORD</name>
+          <description>Service password</description>
+          <defaultValue>{{SERVICE_PASSWORD}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers>
+    <hudson.triggers.TimerTrigger>
+      <spec>@midnight</spec>
+    </hudson.triggers.TimerTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>snapshot_purge=$(curl -X POST ${SERVICE_URL}/backend/snapshot/purge --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD})
+      code=$(echo $snapshot_purge | cut -d &apos; &apos; -f 2,3 | cut -d &apos;,&apos; -f1 | cut -d &apos;:&apos; -f 2 | cut -d &apos; &apos; -f2)
+
+      if [ &quot;$code&quot; = &quot;200&quot; ]; then
+         exit 0
+      fi
+      echo $snapshot_purge
+      exit 1
+      </command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>workspace_purge=$(curl -X POST ${SERVICE_URL}/backend/workspace/purge --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD})
+      code=$(echo $workspace_purge | cut -d &apos; &apos; -f 2,3 | cut -d &apos;,&apos; -f1 | cut -d &apos;:&apos; -f 2 | cut -d &apos; &apos; -f2)
+
+      if [ &quot;$code&quot; = &quot;200&quot; ]; then
+      exit 0
+      fi
+      echo $workspace_purge
+      exit 1
+      </command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

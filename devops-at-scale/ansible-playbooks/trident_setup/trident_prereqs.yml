@@ -1,0 +1,34 @@
+---
+- hosts: master
+  gather_facts: false
+  vars:
+    trident_namespace: trident
+
+  tasks:
+  - name: Install pip
+    yum:
+      name: 'python-pip'
+
+  - name: Update pip
+    pip:
+      name: pip
+      state: latest
+
+  - name: Update setuptools
+    pip:
+      name: setuptools
+      state: latest
+
+  - name: Install openshift (required for k8s)
+    pip:
+      name: openshift
+      state: latest
+      # pip cannot uninstall ipaddress if already installed
+      extra_args: "--ignore-installed ipaddress" 
+
+  - name: Create a k8s namespace
+    k8s:
+      name: "{{ trident_namespace }}"
+      api_version: v1
+      kind: Namespace
+      state: present

@@ -1,0 +1,19 @@
+---
+- hosts: master
+  gather_facts: false
+  vars:
+    trident_namespace: trident
+
+  tasks:
+  - name: echo
+    command: kubectl get pods -n "{{ trident_namespace }}"
+    register: result
+
+  - debug:
+      var: result.stdout
+ 
+  - name: fail if 2/2 Running is not in output
+    fail:
+        msg: "Trident pods are not running"
+    when:
+        not (result.stdout | regex_search('2/2\s+Running'))

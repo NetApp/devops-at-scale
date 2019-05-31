@@ -1,0 +1,16 @@
+{{- if not .Values.persistence.existingClaim -}}
+apiVersion: "v1"
+kind: "PersistentVolumeClaim"
+metadata:
+  name: "{{ .Chart.Name }}-pvc"
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "{{ .Values.StorageClass }}"
+    trident.netapp.io/reclaimPolicy: "Retain"
+    trident.netapp.io/exportPolicy: "default"
+spec:
+  accessModes:
+    - "ReadWriteMany"
+  resources:
+    requests:
+      storage: "{{ .Values.persistence.volumeSize }}"
+{{- end -}}

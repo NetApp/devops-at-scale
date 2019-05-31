@@ -1,0 +1,25 @@
+- hosts: localhost
+  gather_facts: no
+  vars:
+    input: &input
+      hostname: "{{ netapp_hostname }}"
+      username: "{{ netapp_username }}"
+      password: "{{ netapp_password }}"
+  vars_files:
+    - "{{ file }}"
+  tasks:
+  - name: Get Ontapi version
+    na_ontap_gather_facts:
+      state: info
+      <<: *input
+      https: true
+      validate_certs: false
+  - import_role:
+      name: na_ontap_cluster_config
+    vars:
+      <<: *input
+  - import_role:
+      name: na_ontap_vserver_create
+    vars:
+      <<: *input
+    when: vservers != None

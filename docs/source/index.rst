@@ -2,10 +2,10 @@ Overview
 ==========================================
 
 
-Build-at-Scale is a Kubernetes based open source solution which provides:
+DevOps-at-Scale is a Kubernetes based open source solution which provides:
   - Centralized management of the entire Software Development Tools Ecosystem
   - Centralized management of developer workspaces
-  - Fully containerized tools environment (all deployed services run within kubernetes pods)
+  - Fully containerized tools environment (all deployed as Kubernetes services run within pods)
   - Simplified creation of CI/CD pipelines for source code repositories
   - Quick and storage efficient developer workspace creation using ontap technology
   - Easy workspace access for developers via Theia IDE or NFS mounts
@@ -22,3 +22,5 @@ Contents
    uninstall
    support
    license
+   references
+   release_notes

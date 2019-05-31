@@ -1,0 +1,3 @@
+replicaCount: 1
+image:  archana51189/devops-at-scale:1.1
+imagePullPolicy: Always

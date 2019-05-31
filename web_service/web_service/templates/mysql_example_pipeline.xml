@@ -1,0 +1,285 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.12">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty plugin="gitlab-plugin@1.4.5">
+      <gitLabConnection>Gitlab Helm</gitLabConnection>
+    </com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>BUILDVOL</name>
+          <description>The ONTAP volume associated with this pipeline
+</description>
+          <defaultValue>{{BUILDVOL}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SNAPSHOT_NAME</name>
+          <description>The snapshot naming convention for reoccurring CI snapshots</description>
+          <defaultValue>{{SNAPSHOT_NAME}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SOURCE_CODE_URL</name>
+          <description></description>
+          <defaultValue>{{SOURCE_CODE_URL}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SOURCE_CODE_BRANCH</name>
+          <description></description>
+          <defaultValue>{{SOURCE_CODE_BRANCH}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SOURCE_CODE_CREDENTIALS</name>
+          <description></description>
+          <defaultValue>{{SOURCE_CODE_CREDENTIALS}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>BLUEMIX_API_KEY</name>
+          <description></description>
+          <defaultValue>{{BLUEMIX_API_KEY}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>BLUEMIX_ORG</name>
+          <description></description>
+          <defaultValue>{{BLUEMIX_ORG}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>BLUEMIX_SPACE</name>
+          <description></description>
+          <defaultValue>{{BLUEMIX_SPACE}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>BLUEMIX_CONTAINER_REGISTRY</name>
+          <description></description>
+          <defaultValue>{{BLUEMIX_CONTAINER_REGISTRY}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SERVICE_PASSWORD</name>
+          <description></description>
+          <defaultValue>{{SERVICE_PASSWORD}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SERVICE_USERNAME</name>
+          <description></description>
+          <defaultValue>{{SERVICE_USERNAME}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>GIT_VOLUME</name>
+          <description></description>
+          <defaultValue>{{GIT_VOLUME}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>WEB_SERVICE_URL</name>
+          <description>Web Service URL</description>
+          <defaultValue>{{WEB_SERVICE_URL}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>INSTANCE_ID</name>
+          <description></description>
+          <defaultValue>{{INSTANCE_ID}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>RUN_CLEAN_BUILD</name>
+          <description></description>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers/>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.34">
+    <script>
+// Helper Functions
+
+def generateTimeStamp() {
+  def now = new Date()
+  return now.format(&quot;yyyyMMddmmss&quot;, TimeZone.getTimeZone(&apos;UTC&apos;))
+}
+
+def replaceDashesAndPeriods(oldString) {
+  def newString = oldString
+  newString = newString.replaceAll(&apos;[.|-]&apos;,&apos;_&apos;)
+  return newString
+}
+
+// Global Variables
+
+def jobName = &quot;${JOB_NAME}&quot;
+def jobNameNoUnderScores = jobName.replaceAll(&apos;_&apos;,&apos;-&apos;)
+def pvcName =  &quot;${jobNameNoUnderScores}-pvc&quot;
+def volumeMountPath = &apos;/mnt/&apos; + params.BUILDVOL
+def podName =  &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
+def podLabel = &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
+def gitDir = volumeMountPath + &apos;/git&apos;
+def buildDir = gitDir + &apos;/build&apos;
+def sourceCodeURL = params.SOURCE_CODE_URL
+def sourceCodeBranch = params.SOURCE_CODE_BRANCH
+def sourceCodeCredentials = params.SOURCE_CODE_CREDENTIALS
+def gitVolume = params.GIT_VOLUME
+def web_service_url = params.WEB_SERVICE_URL
+def scmSnapshotName = &quot;&quot;
+def ciSnapshotName = &quot;&quot;
+def currentGitRevision = &quot;&quot;
+def instance_id = params.INSTANCE_ID
+def has_params_to_push_docker_image = params.BLUEMIX_CONTAINER_REGISTRY &amp;&amp; params.DEPLOYMENT_NAME &amp;&amp; params.VERSION_NUM &amp;&amp; params.KUBE_CONFIG_FILE
+
+echo &quot;Running CI Pipeline&quot;
+echo &quot;Note: This Pipeline expects that a pvc with name ${pvcName} is available prior to running&quot;
+
+// Define Kubernetes Pod that we will use for this job and mount Ontap Volume on this POD
+podTemplate(name: podName , label: podLabel,
+volumes: [persistentVolumeClaim(claimName: pvcName, mountPath: volumeMountPath, readOnly: false)],
+containers: [
+    containerTemplate(
+        name: &apos;jnlp&apos;,
+        workingDir: &apos;/home/jenkins&apos;,
+        image: &quot;${params.BLUEMIX_CONTAINER_REGISTRY}/jnlp-slave-mysql-server:latest&quot;,
+        args: &apos;${computer.jnlpmac} ${computer.name}&apos;,
+    ), ]
+
+)
+{
+  node(&apos;master&apos;)
+  {
+        stage(&apos;Create SCM snapshot&apos;)
+        {
+          if (env.gitlabAfter) {
+            currentGitRevision = env.gitlabAfter
+            scmSnapshotName = replaceDashesAndPeriods(env.gitlabSourceRepoName) +
+                              &apos;_&apos; + replaceDashesAndPeriods(env.gitlabBranch) +
+                              &apos;_&apos; + env.gitlabAfter + &apos;_&apos; + generateTimeStamp()
+            sh &quot;curl -X POST ${web_service_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.GIT_VOLUME} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${scmSnapshotName}&apos; -F &apos;type=scm&apos; -F instance_id=${instance_id}&quot;
+            echo &quot;SCM snapshot created: ${scmSnapshotName}&quot;
+          }
+          else {
+            echo &quot;Build not triggered by gitlab hook , skipping SCM snapshot creation&quot;
+          }
+        }
+  }
+
+// Run Main CI Process on Pod
+    node(podLabel)
+    {
+        stage(&apos;Setup&apos;) {
+            sh &quot;mkdir -p ${gitDir}&quot;
+            echo &apos;Check if netapp volume is correctly mounted&apos;
+            if (! fileExists(gitDir)) {
+                error &quot;could not find ${gitDir}, check ONTAP volume is mounted!&quot;
+            }
+
+        }
+        stage(&apos;Checkout&apos;) {
+            if (params.RUN_CLEAN_BUILD) {
+                echo &quot;Running Clean Build&quot;
+                sh &quot;sudo rm -rf ${volumeMountPath}/*&quot;
+            }
+
+            if (fileExists(&quot;${gitDir}/.git&quot;)) {
+                 dir (gitDir) {
+                    sh &quot;git pull&quot;
+                }
+            }
+            else {
+                sh &quot;git clone --progress ${sourceCodeURL} ${gitDir}&quot;
+            }
+            dir (gitDir) {
+                sh &quot;git checkout ${sourceCodeBranch}&quot;
+                currentGitRevision = sh(returnStdout: true, script: &apos;git rev-parse HEAD&apos;).trim()
+                if (currentBuild.description)
+                    currentBuild.description  = currentBuild.description + &quot;\n&quot;
+                else
+                    currentBuild.description = &quot;&quot;
+                currentBuild.description = currentBuild.description + &quot;Commit: &quot; + currentGitRevision.take(7)
+            }
+        }
+        stage(&apos;Build&apos;) {
+            sh &quot;mkdir -p ${buildDir}&quot;
+            dir(buildDir) {
+                echo &apos;running build&apos;
+                sh &apos;cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=. ../&apos;
+                sh &apos;make&apos;
+                sh &apos;sudo make install&apos;
+            }
+        }
+        stage(&apos;Save artifacts&apos;) {
+
+            dir(gitDir) {
+                // TODO: add exclude:/include: patterns as needed
+		//stash name: &apos;image_contents&apos;
+            }
+        }
+    }
+
+// Create Snapshot and add to Snapshot List
+// This should all be done on master
+
+    node(&apos;master&apos;) {
+
+        stage(&apos;Create CI Snapshot&apos;) {
+          ciSnapshotName = currentGitRevision + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
+          sh &quot;curl -X POST ${web_service_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.BUILDVOL} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${ciSnapshotName}&apos; -F &apos;type=ci&apos; -F instance_id=${instance_id}&quot;
+          echo &quot;CI snapshot created: ${ciSnapshotName}&quot;
+        }
+        stage(&apos;copy kube config&apos;){
+          echo &quot;Expecting Kubernetes config .yml and .pem files from jenkins_home/userContent in kube-config directory&quot;
+          sh &quot;mkdir -p kube-config/&quot;
+          sh &quot;cp -a ${JENKINS_HOME}/userContent/. kube-config/&quot;
+          stash name: &apos;kube-config&apos;, includes: &quot;kube-config/*&quot;
+        }
+    }
+}
+
+// Build the &quot;mock&quot; docker image using container containing bluemix cli
+
+def buildDockerImagePodName = &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod-bx-ic&quot;
+podTemplate(name: buildDockerImagePodName , label: buildDockerImagePodName,
+containers: [
+    containerTemplate(
+        name: &apos;jnlp&apos;,
+        workingDir: &apos;/home/jenkins&apos;,
+        image: &quot;${params.BLUEMIX_CONTAINER_REGISTRY}/jnlp-slave-bx-ic:0.5.5&quot;,
+        args: &apos;${computer.jnlpmac} ${computer.name}&apos;,
+    ), ]
+
+)
+{
+    node(buildDockerImagePodName)
+    {
+      if (has_params_to_push_docker_image) {
+        def imageName = &quot;${params.BLUEMIX_CONTAINER_REGISTRY}/${jobNameNoUnderScores}:${params.VERSION_NUM}.${BUILD_NUMBER}&quot;
+        stage(&apos;Build Docker image&apos;) {
+            dir(&quot;temp&quot;) {
+              sh &apos;pwd&apos;
+	      //unstash name: &apos;image_contents&apos;
+              sh &apos;ls&apos;
+              sh &apos;bx plugin list&apos;
+              sh &apos;bx plugin install ibm-containers -r Bluemix&apos;
+              // now we can login and build the image
+              sh &quot;bx login --apikey ${params.BLUEMIX_API_KEY} -a https://api.ng.bluemix.net -o &#92;&quot;${params.BLUEMIX_ORG}&#92;&quot; -s &#92;&quot;${params.BLUEMIX_SPACE}&#92;&quot;&quot;
+              sh &apos;bx ic init&apos;
+              sh &quot;bx ic build . --tag ${imageName}&quot;
+            }
+        }
+        stage(&apos;Deploy new image in container&apos;){
+          dir(&quot;deploy&quot;){
+              unstash name: &apos;kube-config&apos;
+              sh &quot;kubectl set image deployment/${params.DEPLOYMENT_NAME} ${params.DEPLOYMENT_NAME}=registry.ng.bluemix.net/${imageName} --kubeconfig=kube-config/${params.KUBE_CONFIG_FILE}&quot;
+          }
+        }
+      }
+      else {
+        echo &apos;You must manually enter params KUBE_CONFIG_FILE, VERSION_NUM, DEPLOYMENT_NAME, DEPLOYMENT_NAME and BLUEMIX_CONTAINER_REGISTRY to build and update container image.&apos;
+      }
+    }
+}
+
+</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

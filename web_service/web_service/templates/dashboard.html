@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<meta http-equiv='cache-control' content='no-cache'>
+<script type="text/javascript"  src="/static/scripts/dashboard.js"></script>
+<div id='pipelines-div' class="container">
+  <h2>Pipelines</h2>
+  <table id='pipelines-table' class='table table-hover'>
+    <thead>
+        <th>
+          <span>Pipeline</span>
+        </th>
+        <th>
+          <span>SCM</span>
+        </th>
+        <th>
+          <span>CI</span>
+        </th>
+        <th>
+          <span>Last CI Build</span>
+        </th>
+        <th>
+          <span>Action</span>
+        </th>
+    </thead>
+    <tbody id="pipelines-body"></tbody>
+    {% for pipeline in pipelines %}
+    <tr>
+      <td>{{pipeline['pipeline_name']}}</td>
+      <td><a href="{{pipeline['scm_url']}}">{{pipeline['scm_url']}}</a></td>
+      <td><a href="{{pipeline['jenkins_url']}}">{{pipeline['jenkins_url']}}</a></td>
+      <td>{{pipeline['last_build']}}</td>
+      <td><button onclick="deletePipeline(this)" value="{{pipeline['pipeline_name']}}" type="button" class="btn btn-danger">Delete</button></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<div id="workspaces-div" class="container">
+  <h2>Workspaces</h2>
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Username</th>
+        <th>Pipeline</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for workspace in workspaces %}
+      <tr>
+        <td>{{workspace['name']}}</td>
+        <td>{{workspace['username']}}</td>
+        <td>{{workspace['pipeline']}}</td>
+        <td><button onclick="deleteWorkspace(this)" value="{{workspace['name']}}" type="button" class="btn btn-danger">Delete</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div id="services-div" class="container">
+  <h2>Infrastructure Status</h2>
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Url</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for service in services %}
+      <tr>
+        <td>{{service['name']}}</td>
+        <td>{{service['type']}}</td>
+        <td><a href="{{service['url']}}">{{service['url']}}</a></td>
+        <td><span style="background-color:#28a745;font-weight:bold" class="badge badge-success">Running</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Build Script for Build@Scale product
+# Build Script for Devops@Scale product
 
 version=$1
 if [[ -z $version ]]; then
@@ -13,7 +13,7 @@ if [ "$clean" = "clean" ]; then
 fi
 
 web_service_image_dir="$currentDirectory/web_service"
-web_service_image_name="build-at-scale:${version}"
+web_service_image_name="devops-at-scale:${version}"
 
 echo "Building ${web_service_image_name}"
 cd $web_service_image_dir && $docker_build_command $web_service_image_name .

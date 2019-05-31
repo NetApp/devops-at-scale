@@ -1,0 +1,25 @@
+- hosts: all
+
+  vars:
+    kubernetes_allow_pods_on_master: True
+    kubernetes_version: '1.11.0'
+    kubernetes_version_rhel_package: '1.11.0'
+
+  environment:
+    # required for join to succeed
+    PATH: "{{ ansible_env.PATH }}:/usr/sbin"
+
+  pre_tasks:
+    # Turn off swap on k8s nodes
+    - name: Remove swapfile from /etc/fstab
+      mount:
+        name: swap
+        fstype: swap
+        state: absent
+    - name: Disable swap
+      command: /usr/sbin/swapoff -a
+      when: ansible_swaptotal_mb > 0   
+
+  roles:
+    - geerlingguy.docker
+    - geerlingguy.kubernetes

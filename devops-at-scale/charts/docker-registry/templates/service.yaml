@@ -1,0 +1,21 @@
+{{- if eq .Values.global.registry.type "docker-registry" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+{{- if .Values.service.annotations }}
+  annotations:
+{{ toYaml .Values.service.annotations | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.global.ServiceType }}
+  ports:
+    - port: {{ .Values.service.port }}
+      protocol: TCP
+      name: {{ .Values.service.name }}
+      targetPort: {{ .Values.service.port }}
+  selector:
+    app: {{ .Chart.Name }}
+{{- end -}}
