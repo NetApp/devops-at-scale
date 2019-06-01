@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# Build Script for Devops@Scale product
+# Build Script for Devops@Scale solution
 
 version=$1
 if [[ -z $version ]]; then
