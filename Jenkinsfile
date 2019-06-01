@@ -34,10 +34,9 @@ pipeline {
         stage('Hub Scan') {
           steps {
             sh '''
-              # export BD_HUB_TOKEN="NzhiYWRjY2YtYzE5YS00NmQzLWI3MmUtNDU1MDc5Y2VkOTMwOjNlMzRlZWRmLWMyNGItNGQ2Ny04MGUwLWJmMTRmNzA2MTlmYw=="
+              # export BD_HUB_TOKEN=<hub-token>
               # /tmp/scan.cli-2018.12.0/bin/scan.cli.sh --scheme https --port 443 --insecure --host blackduck.eng.netapp.com --project 'Build@Scale' --release '1.1' ./
-              # TEMPORARY -- until Rahul gives us an API token
-              export BD_HUB_PASSWORD=blackduck
+              export BD_HUB_PASSWORD=<hub-password>
               /tmp/scan.cli-2018.12.0/bin/scan.cli.sh --scheme https --port 443 --insecure --host blackduck.eng.netapp.com --project 'Build@Scale' --release '1.1' --username=sysadmin ./
             '''
           }
