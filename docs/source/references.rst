@@ -10,6 +10,7 @@ References
 Installation and setup of Kubernetes cluster using Ansible
 ----------------------------------------------------------------------------
 **Pre-requisites**
+
 1. If you do not have an Ansible setup. Please setup by following the instructions `here <https://netapp.io/2018/10/08/getting-started-with-netapp-and-ansible-install-ansible/>`_
 
 2. One or more VMs reachable from where Ansible playbooks are being run
@@ -58,9 +59,7 @@ Installation and setup of Trident on Kubernetes using Ansible
 
 .. note:: Ansible playbooks referred in the below steps are located in devops-at-scale/devops-at-scale/ansible-playbooks/trident_setup
 
-**Usage**
 
-**Trident installer**
 **Qualify your Kubernetes cluster**
 
     .. code-block:: shell
@@ -89,6 +88,7 @@ Download installer and final checks
 (requires root access on K8S master node to run yum - and maybe k8s)
 
 **Trident installation**
+
 3. The next step will be to run the trident installer.
 In the kubernetes master node:
 
@@ -111,6 +111,7 @@ In the kubernetes master node:
 As of today, you should see: 2/2 Running (1 pod is running 2 containers out of 2)
 
 **Trident configuration**
+
 5. The backend created in the preparation step is only used to support the Trident etcd persistent storage.
 New backend(s) need to be created to support production.
 
