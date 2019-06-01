@@ -1,4 +1,4 @@
-''' helper methods '''
+""" helper methods """
 import json
 import logging
 import os
@@ -27,16 +27,17 @@ try:
 except:
     HAS_NETAPP_LIB = False
 
-ENCPASS='Build@Scale@99!'
+ENCPASS = 'Build@Scale@99!'
+
 
 def extract_name_from_git_url(url):
-    '''Extract project name from SCM URL'''
+    """Extract project name from SCM URL"""
     repo_name = os.path.basename(url)
     return re.match(r"^(.*?)(\.git)?$", repo_name).group(1)
 
 
 def extract_url_from_git_ssh_url(url):
-    '''Extract project name from SSH URL'''
+    """Extract project name from SSH URL"""
     needle = r'git@(\S+):(.*)\.git'
     matched = re.match(needle, url)
     if matched:
@@ -45,7 +46,7 @@ def extract_url_from_git_ssh_url(url):
 
 
 def extract_url_from_git_http_url(url):
-    '''Extract project URL name from SCM URL'''
+    """Extract project URL name from SCM URL"""
     needle = r'(https?://)(\S+@)?(.*)\.git'
     matched = re.match(needle, url)
     if matched:
@@ -54,16 +55,22 @@ def extract_url_from_git_http_url(url):
 
 
 def verify_successful_response(responses):
-    '''Verify if response is success'''
+    """Verify if response is success"""
     success = True
-    for response in responses:
-        if response['code'] > 399:
+    # list of response statuses
+    if type(responses) is list:
+        for response in responses:
+            if response['code'] > 399:
+                success = False
+    # check for single response
+    elif type(responses) is dict:
+        if responses['code'] > 399:
             success = False
     return success
 
 
 def get_first_failure(responses):
-    '''Find failed response from list of responses'''
+    """Find failed response from list of responses"""
     for response in responses:
         if response['code'] > 399:
             return response
@@ -71,15 +78,15 @@ def get_first_failure(responses):
 
 
 def return_random_string(length):
-    '''Returns random ascii string'''
-    def rand_str_func(n): return ''.join(
-        [random.choice(string.ascii_lowercase) for i in range(n)])
+    """Returns random ascii string"""
+    def rand_str_func(n):
+        return ''.join([random.choice(string.ascii_lowercase) for i in range(n)])
     rand_str = rand_str_func(length)
     return rand_str
 
 
 def format_response(response_collection):
-    '''Re-format responses to a dict'''
+    """Re-format responses to a dict"""
     return {
         "code": response_collection[0]['code'],
         "message": "%s created" % response_collection[0]['resource'],
@@ -89,7 +96,7 @@ def format_response(response_collection):
 
 
 def sanitize_scm_url(url):
-    '''Transform ssh url to http'''
+    """Transform ssh url to http"""
     if url.startswith(("http://", "https://")):
         # we could strip the username@ and .git
         return extract_url_from_git_http_url(url)
@@ -99,19 +106,25 @@ def sanitize_scm_url(url):
     return None
 
 
-def request_validator(request_form_object, keys):
-    '''Check if all items in 'keys' are present in request-form'''
+def check_for_missing_params(request_form_object, keys):
+    """
+    Check if all items in 'keys' are present in request-form
+    :param request_form_object: Input form params
+    :param keys: required keys
+    :return: [] if there are no missing params, list() of missing params otherwise
+    """
+    missing_params = list()
     for key in keys:
         try:
             if not request_form_object[key]:
-                return False
+                missing_params.append(key)
         except KeyError:
-            return False
-    return True
+            missing_params.append(key)
+    return [] if not missing_params else missing_params
 
 
 def create_pvc_notification(customer_pvcs):
-    ''' Creates flash message for updating jenkins url following pvc creation '''
+    """ Creates flash message for updating jenkins url following pvc creation """
     pvc_notification = "Have you created your Jenkins instance? \
                         Please run Helm commands noted in documentation.</br>GitLab PVCs: %s, %s, %s, %s</br>Jenkins PVC: %s" \
                         % (customer_pvcs['gitlab-data'], customer_pvcs['gitlab-etc'],
@@ -121,24 +134,28 @@ def create_pvc_notification(customer_pvcs):
 
 
 def replace_ontap_invalid_char(text):
-    '''
+    """
         Replace characters which are not supported by ontap with underscores
-    '''
+    """
     return re.sub(r"[-|.]", r"_", text)
 
 
 def replace_kube_invalid_characters(text):
-    '''
+    """
         Replace characters which are not supported by kubernetes with dashes
-    '''
+    """
     return re.sub(r"[_]", r"-", text)
 
 
 def connect_db():
-    '''Connect to database and retrieve config document'''
+    """Connect to database and retrieve config document"""
+    logging.info("APP CONFIG:: " + str(app.config))
+    if app.config.get('DATABASE_URL') is None:
+        app.config['DATABASE_URL'] = KubernetesAPI().get_service_url(service_name=app.config['DATABASE_SERVICE_NAME'])
+        logging.info("DATABASE_URL not known, fetching from Kubernetes " + app.config['DATABASE_URL'])
     try:
         database = Database.connect(app.config['DATABASE_URL'], app.config['DATABASE_USER'],
-                                    app.config['DATABASE_PASSWORD'], app.config['DATABASE_NAME'])
+                                    app.config['DATABASE_PASS'], app.config['DATABASE_NAME'])
     except Exception as e:
         print("Unable to connect to database: %s" % traceback.format_exc())
         raise e
@@ -146,14 +163,13 @@ def connect_db():
 
 
 def get_db_config():
-    '''Connect to database and retrieve config document'''
+    """Connect to database and retrieve config document"""
     database = connect_db()
     try:
         config_document = Database.get_document_by_name(
             database, 'configuration')
     except Exception as e:
-        print("Unable to retrieve configuration document from database: %s" %
-              traceback.format_exc())
+        print("Unable to retrieve configuration document from database: %s" % traceback.format_exc())
         raise e
     return config_document
 
@@ -171,7 +187,7 @@ def connect_jenkins(account=None):
 
 
 def get_db_user_document(username):
-    '''Connect to database and retrieve user document'''
+    """Connect to database and retrieve user document"""
     database = connect_db()
     user_document = None
     users = Database.get_documents_by_type(database, 'user')
@@ -181,49 +197,42 @@ def get_db_user_document(username):
     return user_document
 
 
-def create_purge_jenkins_job(job, account):
-    '''Creates a Jenkins job'''
-    jenkins = connect_jenkins(account)
+def set_jenkins_job_params(job_type):
     config = get_db_config()
     job_details = dict()
-    job_details['type'] = 'trigger-purge'
+    job_details['type'] = job_type
     job_details['web_service_url'] = config['web_service_url']
-    job_details['web_service_username'] = config['service_username']
-    job_details['web_service_password'] = config['service_password']
-    if not jenkins.create_job(job, job_details, None):
-        raise RuntimeError("Jenkins job creation failure %s" % job)
+    job_details['web_service_username'] = config['web_service_username']
+    job_details['web_service_password'] = config['web_service_password']
+    if job_type == 'ci-pipeline':  # Add additional details from config for pipeline job
+        for key in ['scm_volume', 'registry_service_name', 'scm_pvc_name']:
+            job_details[key] = config[key]
+    return job_details
 
 
 def get_pipelines_for_dashboard():
-    '''
+    """
         Get all pipelines available for displaying in dashboard
-    '''
+    """
     database = connect_db()
     pipeline_documents = Database.get_documents_by_type(
         database, doc_type='project')
     pipelines_data = list()
     jenkins_obj = connect_jenkins()
     for pipeline in pipeline_documents:
-        last_build_status = jenkins_obj.get_last_build_status(
-            job_name=pipeline['name'])
-        scm, jenkins = "dummy-url", "dummy-url"
-        if 'scm_url' in pipeline:
-            scm = pipeline['scm_url']
-        if 'jenkins_url' in pipeline:
-            kube = KubernetesAPI()
-            external_url = kube.get_service_url('build-at-scale-jenkins')
-            jenkins = "http://%s/job/%s" % (external_url, pipeline['name'])
+        last_build_status = jenkins_obj.get_last_build_status(job_name=pipeline['name'])
+        # both scm and jenkins URLs are set as part of pipeline_create
         pipelines_data.append({'pipeline_name': pipeline['name'],
-                               'scm_url': scm,
-                               'jenkins_url': jenkins,
+                               'scm_url': pipeline['scm_url'],
+                               'jenkins_url': pipeline['jenkins_url'],
                                'last_build': last_build_status})
     return pipelines_data
 
 
 def get_pipelines():
-    '''
+    """
         Get all pipelines available
-    '''
+    """
     database = connect_db()
     pipeline_documents = Database.get_documents_by_type(
         database, doc_type='project')
@@ -234,9 +243,9 @@ def get_pipelines():
 
 
 def get_git_projects():
-    '''
+    """
         Get all GIT projects for this instance
-    '''
+    """
     config_document = get_db_config()
     url = config_document['scm_url'] + '/rest/api/1.0/projects'
     headers = {'Content-Type': 'application/json'}
@@ -252,9 +261,9 @@ def get_git_projects():
 
 
 def get_git_repos(project_key):
-    '''
+    """
         Get all GIT projects for this instance
-    '''
+    """
     config_document = get_db_config()
     url = config_document['scm_url'] + \
         '/rest/api/1.0/projects/' + project_key + '/repos'
@@ -271,9 +280,9 @@ def get_git_repos(project_key):
 
 
 def get_git_branches(project_key, repo_name):
-    '''
+    """
         Get all GIT projects for this instance
-    '''
+    """
     config_document = get_db_config()
     url = config_document['scm_url'] + '/rest/api/1.0/projects/' + \
         project_key + '/repos/' + repo_name + '/branches'
@@ -290,9 +299,9 @@ def get_git_branches(project_key, repo_name):
 
 
 def modify_ssl_for_volume(volume, ssl):
-    '''
+    """
         Apply ssl to volume
-    '''
+    """
     config_document = get_db_config()
     ontap_instance = OntapService(config_document['ontap_api'],
                                   config_document['ontap_apiuser'],
@@ -358,7 +367,9 @@ def autosupport(vol_name, vol_size):
     # if state is 'pipeline-create':
     api.add_new_child("event-description", "A Jenkins pipeline and an ONTAP volume: " + vol_name
                       + " of size " + str(vol_size) + " has been created")
-    # Log level. Accepted values are 0 for 'emergency', 1 for 'alert', 2 for 'critical', 3 for 'error', 4 for 'warning', 5 for 'notice', 6 for 'info', and 7 for 'debug'. As of Data ONTAP 9.0, log-level's 2 and 4 are no longer supported. Specifying 2 or 4 would be equivalent to specifying 3 or 5, respectively.
+    # Log level. Accepted values are 0 for 'emergency', 1 for 'alert', 2 for 'critical', 3 for 'error', 4 for 'warning',
+    # 5 for 'notice', 6 for 'info', and 7 for 'debug'. As of Data ONTAP 9.0, log-levels 2 and 4 are no longer supported.
+    # Specifying 2 or 4 would be equivalent to specifying 3 or 5, respectively.
     api.add_new_child("log-level", "6")
     # If 'true', an AutoSupport message will be generated.
     api.add_new_child("auto-support", "false")
@@ -366,131 +377,213 @@ def autosupport(vol_name, vol_size):
 
 
 def get_services():
-    '''
+    """
         Get information about all services associated with Build@Scale
-    '''
+    """
     config_document = get_db_config()
     kube = KubernetesAPI()
     services = []
     # Retrieve scm service
-    scm_service_name = "build-at-scale-%s" % (config_document['scm_type'])
-    scm_service_url = "http://%s" % kube.get_service_url(scm_service_name)
+    scm_service_name = config_document['scm_service_name']
+    scm_service_url = kube.get_service_url(scm_service_name)
     services.append(
         {'name': config_document['scm_type'], 'type': 'scm', 'url': scm_service_url})
     # Retrieve registry service
-    registry_service_name = "build-at-scale-%s" % (
-        config_document['registry_type'])
-    registry_service_url = "http://%s" % kube.get_service_url(
-        registry_service_name)
+    registry_service_name = config_document['registry_service_name']
+    registry_service_url = kube.get_service_url(registry_service_name)
     services.append(
         {'name': config_document['registry_type'], 'type': 'registry', 'url': registry_service_url})
     # Retrieve ci service
-    jenkins_service_name = "build-at-scale-jenkins"
-    jenkins_service_url = "http://%s" % kube.get_service_url(
-        jenkins_service_name)
+    jenkins_service_name = config_document['jenkins_service_name']
+    jenkins_service_url = kube.get_service_url(jenkins_service_name)
     services.append({'name': 'jenkins', 'type': 'ci',
                      'url': jenkins_service_url})
     # Retrieve database service
-    database_service_name = "build-at-scale-couchdb"
-    database_service_url = "http://%s" % kube.get_service_url(
-        database_service_name)
+    database_service_name = config_document['database_service_name']
+    database_service_url = kube.get_service_url(database_service_name)
     services.append({'name': 'couchdb', 'type': 'database',
                      'url': database_service_url})
-    # Retrieve ontap nslm information (this is not a kubernetes service)
-    services.append({'name': 'ontap', 'type': 'storage', 'name': 'ontap',
-                     'url': "https://%s" % config_document['ontap_api']})
     logging.error(services)
     return services
 
+
 def get_workspaces():
-    '''
+    """
         Get information about all workspaces associated with Build@Scale
-    '''
+    """
     db = connect_db()
 
     try:
-        workspaces = Database.get_documents_by_type(db,'workspace')
+        workspaces = Database.get_documents_by_type(db, 'workspace')
     except Exception as e:
-        logging.error("Unable to retrieve workspace documents from database: %s" %
-              traceback.format_exc())
-        workspaces=[]
+        logging.error("Unable to retrieve workspace documents from database: %s" % traceback.format_exc())
+        workspaces = []
     return workspaces
 
-def delete_workspace(name):
-    '''
 
-    '''
+def delete_workspace(name):
+    """
+        Delete Kube service representing the workspace IDE
+        Delete Kube pod associated with the service
+        Delete Kube PVC representing the workspace (Trident will delete the associated PV and ONTAP clone)
+        Delete Kube service representing the IDE
+    """
+    # TODO: Handle exceptions on db connection failure, and failure on each of the kube operations
     try:
         config = get_db_config()
         db = connect_db()
-        ontap = OntapService(config['ontap_api'], config['ontap_apiuser'], config['ontap_apipass'], config['ontap_svm_name'], config['ontap_aggr_name'], config['ontap_data_ip'])
-        ontap.delete_volume(name)
-        workspace = Database.get_document_by_name(db,name)
-        pod_name = workspace['pod_name']
-        db.delete(workspace)
+        workspace = Database.get_document_by_name(db, name)
+        pvc = workspace['pvc']
+        pod_name = workspace['pod']
+        service = workspace['service']
         kube = KubernetesAPI()
+        kube.delete_service(service)
+        logging.info("Workspace service deleted")
         kube.delete_pod(pod_name)
-
+        logging.info("Workspace POD deleted")
+        kube.delete_pvc(pvc)
+        logging.info("Workspace PVC deleted")
+        db.delete(workspace)
     except Exception as e:
-        logging.error("Unable to delete workspace!: %s" %
-              traceback.format_exc())
+        logging.error("Unable to delete workspace %s: %s" % (name, traceback.format_exc()))
         raise
 
-def delete_project(name):
-    '''
-    Delete all elements associated with a given project/pipeline(ontap volume/jenkins job)
-    '''
+
+def delete_pipeline(name):
+    """
+    Delete all elements associated with a given pipeline(ONTAP volume/Jenkins job)
+    When using Trident, it is sufficient to delete the PVC mapped to the project
+    (Trident takes care of deleting the volume and PV)
+    """
+    # TODO: Be more specific on what goes in 'try'
     try:
-        config = get_db_config()
+        get_db_config()
         db = connect_db()
-        project = Database.get_document_by_name(db,name)
-        volume = project['volume']
-        ontap = OntapService(config['ontap_api'], config['ontap_apiuser'], config['ontap_apipass'], config['ontap_svm_name'], config['ontap_aggr_name'], config['ontap_data_ip'])
-        ontap.delete_volume(volume)
-        db.delete(project)
+        pipeline = Database.get_document_by_name(db, name)
+        pvc = pipeline['pvc']
+        KubernetesAPI().delete_pvc(pvc)
+        db.delete(pipeline)
         jenkins = connect_jenkins()
         jenkins.delete_job(name)
-
     except Exception as e:
-        logging.error("Unable to delete project!: %s" %
-              traceback.format_exc())
+        logging.error("Unable to delete pipeline %s: %s" % (name, traceback.format_exc()))
         raise
 
-def setup_required(f):
-    @wraps(f)
-    def setup(*args, **kwargs):
-        # Configure the couchdb cluster
-        headers = {'Content-type': 'application/json'}
-        db_cluster_config = {"action": "enable_cluster", "bind_address": "0.0.0.0",
-                             "username": "admin", "password": "admin", "node_count": "1"}
-        try:
-            r = requests.post("http://%s/_cluster_setup" %
-                              app.config['DATABASE_URL'], json=db_cluster_config, headers=headers)
 
+def get_volume_name_for_pipeline(name):
+    """
+    Get volume name for given pipeline
+    """
+    try:
+        config = get_db_config()
+        db = connect_db()
+        project = Database.get_document_by_name(db, name)
+        volume = project['volume']
+        return volume
+    except Exception as e:
+        logging.error("Unable to get volume name for pipeline %s: %s" % (name, traceback.format_exc()))
+        raise
+
+
+def get_all_builds_for_pipeline(pipeline):
+    """
+    Retrieve list of build clones associated with a pipeline
+    (Each build is mapped to an ONTAP clone provisioned by Trident)
+
+    :param pipeline: Name of the pipeline
+    :return: List of clones belonging to the pipeline
+    """
+    # TODO: future: get all snapshots (instead of clones) representing the builds
+    volume = get_volume_name_for_pipeline(pipeline)
+    config = get_db_config()
+    db = connect_db()
+    build_clones = Database.get_build_clones_with_status_by_pipeline(db, volume)
+    build_clones_list = []
+    for clone in build_clones:
+        build_clones_list.append(clone['value'])
+    return build_clones_list
+
+
+def onetime_setup_required():
+    """
+    This method is a one time setup to populate the configuration document in CouchDB
+    If called elsewhere, to avoid writing duplicates, proceeds to setup only when config document is not present.
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    # Configure the couchdb cluster
+    print("ONE TIME SETUP")
+    _setup_couchdb()
+
+
+def _setup_couchdb():
+    # Configure the couchdb cluster
+    # Configure the couchdb cluster
+    headers = {'Content-type': 'application/json'}
+    db_cluster_config = {"action": "enable_cluster", "bind_address": "0.0.0.0",
+                         "username": "admin", "password": "admin", "node_count": "1"}
+    # Retrieve customer configuration document from database
+    database = connect_db()
+    config_document = get_db_config()
+
+    print("GOT DEFAULT CONFIGURATION UPDATED AS:: ", str(config_document))
+
+    # Empty SCM URL this is a sign that setup has not been done yet
+    if config_document['scm_url'] is None:
+        print("ONE TIME SETUP:: CLUSTER COUCHDB")
+        try:
+            r = requests.post("%s/_cluster_setup" % app.config['DATABASE_URL'],
+                              json=db_cluster_config, headers=headers)
         except Exception as exc:
             raise GenericException(
                 500, "Error configuring the couchdb cluster : %s, please contact your administrator" % str(exc))
 
-        # Retrieve customer configuration document from database
-        database = connect_db()
-        config_document = get_db_config()
-        if not config_document:
-            raise GenericException(500,
-                                   "Customer config doc not found, please contact your administrator",
-                                   "Database Exception")
-
-        # Populate configuration document with ontap information
-
-        config_document['ontap_api'] = app.config['ONTAP_API']
-        config_document['ontap_apiuser'] = app.config['ONTAP_APIUSER']
-        config_document['ontap_apipass'] = app.config['ONTAP_APIPASS']
+        # Populate rest of the configuration details from the ENV variables (set by DevOps Admin)
+        kube = KubernetesAPI()
+        # ONTAP
         config_document['ontap_svm_name'] = app.config['ONTAP_SVM_NAME']
         config_document['ontap_aggr_name'] = app.config['ONTAP_AGGR_NAME']
         config_document['ontap_data_ip'] = app.config['ONTAP_DATA_IP']
-        config_document['scm_type'] = app.config['SCM_TYPE']
-        config_document['scm_url'] = "build-at-scale-%s.default" % config_document['scm_type']
+
+        # SCM
+        config_document['scm_service_name'] = app.config['SCM_SERVICE_NAME']
+        config_document['scm_url'] = kube.get_service_url(service_name=app.config['SCM_SERVICE_NAME'])
+        config_document['scm_pvc_name'] = app.config['SCM_PVC_NAME']
+        config_document['scm_volume'] = kube.get_volume_name_from_pvc(pvc_name=app.config['SCM_PVC_NAME'])
+
+        # Jenkins
+        config_document['jenkins_service_name'] = app.config['JENKINS_SERVICE_NAME']
+        config_document['jenkins_url'] = kube.get_service_url(service_name=app.config['JENKINS_SERVICE_NAME'])
+
+        # Database CouchDB
+        config_document['database_service_name'] = app.config['DATABASE_SERVICE_NAME']
+
+        # Artifactory
+        config_document['registry_service_name'] = app.config['REGISTRY_SERVICE_NAME']
         config_document['registry_type'] = app.config['REGISTRY_TYPE']
-        config_document['service_type'] = app.config['SERVICE_TYPE']
+
+        # Webservice
+        config_document['web_service_name'] = app.config['WEB_SERVICE_NAME']
+        config_document['web_service_url'] = kube.get_service_url(service_name=app.config['WEB_SERVICE_NAME'])
+
         config_document.store(database)
+
+    print("FINAL CONFIG DOCUMENT:: ", str(config_document))
+
+
+def setup_required(f):
+    @wraps(f)
+    def setup(*args, **kwargs):
+        """
+        This method is a one time setup to populate the configuration document in CouchDB
+        If called elsewhere, to avoid writing duplicates, proceeds to setup only when config document is not present.
+        :param args:
+        :param kwargs:
+        :return:
+        """
+
+        # TODO: we should only do this once, not everytime
+        _setup_couchdb()
         return f(*args, **kwargs)
     return setup

@@ -1,20 +1,23 @@
 '''Custom exceptions for error handling in views.py'''
 import logging
 
+
 class GenericException(Exception):
     '''Raise a non-specific exception with a given code and message'''
     http_codes = dict()
     # HTTP 4xx -- client-side error
-    http_codes[400] = {'type':'Bad Request',
-                       'message':'Missing one or more required parameters, please re-try'}
+    http_codes[400] = {'type': 'Bad Request',
+                       'message': 'Missing one or more required parameters, please re-try'}
     http_codes[401] = {'type': 'Bad Request',
                        'message': 'User has exceeded workspace limit'}
-    http_codes[406] = {'type':'Bad Request',
-                       'message':'Invalid value for one or more parameters, please re-try'}
+    http_codes[406] = {'type': 'Bad Request',
+                       'message': 'Invalid value for one or more parameters, please re-try'}
     # HTTP 5xx -- server-side error
-    http_codes[500] = {'type':'Server Error',
-                       'message':'Server has encountered an error'}
-
+    http_codes[500] = {'type': 'Server Error',
+                       'message': 'Server has encountered an error'}
+    DB_CONNECTION_ERROR = "Error connecting to the database and fetching configuration document,"\
+                          "please contact your administrator"
+    DB_CONFIG_DOC_NOT_FOUND = "Customer configuration document not found, please contact your administrator"
     '''Log error message and return an Exception'''
     def __init__(self, code, error=None, error_type=None):
         Exception.__init__(self)

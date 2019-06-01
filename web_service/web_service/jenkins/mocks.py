@@ -7,7 +7,7 @@ JOB = {
 }
 
 JOB_INFO = {
-    'lastCompletedBuild' : {
+    'lastCompletedBuild': {
         'url': 'http://jenkins.com/job/abc123/56/',
         'number': 56,
         '_class': 'org.jenkinsci.plugins.workflow.job.WorkflowRun'
@@ -15,7 +15,7 @@ JOB_INFO = {
 }
 
 JOB_INFO_FAILURE = {
-    'lastCompletedBuild' : {
+    'lastCompletedBuild': {
         'number': 0
     }
 }

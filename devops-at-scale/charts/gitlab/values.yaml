@@ -1,0 +1,9 @@
+replicaCount: 1
+image:  gitlab/gitlab-ce:10.7.0-rc7.ce.0
+imagePullPolicy: Always
+persistence:
+  volumeSize: "10000M"
+# The AdminUser for gitlab should always be 'root'
+StorageClass: "basic"
+AdminUser: "root"
+AdminPassword: "root_devopsatscale"

@@ -1,10 +1,10 @@
 #!/bin/bash -e
-# Deploy Script for Build@Scale product
+# Deploy Script for Devops@Scale product
 
 version=$1
 docker_registry=$2
 
-web_service_image_name="build-at-scale:${version}"
+web_service_image_name="devops-at-scale:${version}"
 
 # Tag image
 docker tag $web_service_image_name $docker_registry/$web_service_image_name

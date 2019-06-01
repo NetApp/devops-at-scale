@@ -1,34 +1,53 @@
 ''' configuration couchdb document mapping '''
 from couchdb.mapping import Document, TextField, IntegerField
 
+
 class Configuration(Document):
-    '''Create config document. One configuration per customer'''
+    """
+    Create config document. One configuration per customer
+    For release 1.1
+    """
     name = TextField()
     type = TextField(default="configuration")
-    jenkins_url = TextField(
-        default="http://build-at-scale-jenkins.default:8080/")
-    jenkins_user = TextField(default="admin")
-    jenkins_pass = TextField(default="admin")
-    scm_url = TextField(
-        default="http://build-at-scale-gitlab.default")
-    scm_user = TextField(default="admin")
-    scm_pass = TextField(default="admin")
-    scm_type = TextField(default="gitlab")
-    git_volume = TextField(default="build_at_scale_gitlab")
-    scm_purge_limit = IntegerField(default=50)
-    container_registry = TextField(
-        default="build-at-scale-docker-registry:30450")
-    service_username = TextField(default="admin")
-    service_password = TextField(default="admin")
-    web_service_url = TextField(
-        default="http://build-at-scale-webservice.default:80")
-    workspace_pod_image = TextField(
-        default="theiaide/theia-python:0.4.0-next.6243fc63")
-    user_workspace_limit = IntegerField(default=10)
-    ontap_api = TextField()
-    ontap_apiuser = TextField()
-    ontap_apipass = TextField()
+
+    # ONTAP
     ontap_svm_name = TextField()
     ontap_aggr_name = TextField()
     ontap_data_ip = TextField()
-    registry_type = TextField(default="docker-registry")
+
+    # SCM
+    scm_service_name = TextField()
+    scm_pvc_name = TextField()
+    scm_url = TextField()
+    scm_user = TextField(default="root")
+    scm_pass = TextField(default="root_devopsatscale")
+    scm_volume = TextField()
+    scm_type = TextField(default="gitlab")
+    scm_purge_limit = IntegerField(default=50)
+
+    # JENKINS
+    jenkins_service_name = TextField()
+    jenkins_url = TextField()
+    jenkins_user = TextField(default="admin")
+    jenkins_pass = TextField(default="admin")
+
+    # Database CouchDB
+    database_service_name = TextField()
+
+    # Artifactory
+    registry_service_name = TextField()
+    registry_type = TextField(default="artifactory")
+
+    # Webservice
+    web_service_name = TextField()
+    web_service_url = TextField()
+    web_service_username = TextField(default="admin")
+    web_service_password = TextField(default="admin")
+
+    # Others
+    services_type = TextField(default='NodePort')
+    devops_at_scale_version = TextField(default='1.1')
+
+    # User Workspace
+    workspace_pod_image = TextField(default="theiaide/theia-python:0.4.0-next.6243fc63")
+    user_workspace_limit = IntegerField(default=10)

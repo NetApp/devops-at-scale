@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-artifactory-tests-{{ randAlphaNum 5 | lower }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: {{ .Release.Name }}-artifactory-test
+    image: {{ .Values.image }}
+    command: ["bash","curl -u admin:password localhost:8081/artifactory/api/system/ping"]
+  restartPolicy: Never
+

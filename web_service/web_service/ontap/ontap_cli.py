@@ -29,14 +29,12 @@ permission is obtained from NetApp, Inc.
 '''
 import abc
 import argparse
-import json
 import os
 import sys
 import yaml
 from ontap_apis.ontap_apis import Aggregate, APIServer, Volume
 from ontap_service import OntapService
 
-#from kub.KubernetesAPI import KubernetesAPI
 
 class Base(object):
     ''' base class for common functions '''
@@ -78,58 +76,59 @@ class Base(object):
                 cmds.append(method[len(prefix):])
         return cmds
 
-    def construct_json_response(self, statuses):
-        data = list()
-        for status in statuses:
-            data.append(self.format_status(status))
+    # the below methods are not used anywhere.
+    # def construct_json_response(self, statuses):
+    #     data = list()
+    #     for status in statuses:
+    #         data.append(self.format_status(status))
+    #
+    #     if self.args.json:
+    #         print(json.dumps(data))
+    #     else:
+    #         print("\n".join(data))
 
-        if self.args.json:
-            print(json.dumps(data))
-        else:
-            print("\n".join(data))
+    # def format_status(self, status):
+    #     if self.args.json:
+    #         json = {
+    #             'code': status['code'],
+    #             'status': status['status'],
+    #             'message': status['message'],
+    #             'error': status['error_message'],
+    #             'resource': status['resource'],
+    #             'resource_name': status['resource_name']
+    #         }
+    #         return json
+    #
+    #     msg = ""
+    #     if status['message']:
+    #         msg = status['message']
+    #     if status['error_message']:
+    #         msg = status['error_message']
+    #
+    #     if 'time' in status:
+    #         print(status['resource_name'], "Time:", status['time'])
+    #
+    #     return "status: %s for %s resource %s: %s" % \
+    #         (status['status'], status['resource'], status['resource_name'], msg)
 
-    def format_status(self, status):
-        if self.args.json:
-            json = {
-                'code': status['code'],
-                'status': status['status'],
-                'message': status['message'],
-                'error': status['error_message'],
-                'resource': status['resource'],
-                'resource_name': status['resource_name']
-            }
-            return json
+    # def set_status(self, code, resource_type, resource_name, error=""):
+    #     status = dict()
+    #     status['resource'] = resource_type
+    #     status['resource_name'] = resource_name
+    #     status['code'] = code
+    #     status['error_message'] = error
+    #     if code == 200:
+    #         status['status'] = "SUCCESS"
+    #         status['message'] = "%s %s already exists" % (resource_type, resource_name)
+    #     elif code == 201:
+    #         status['status'] = "COMPLETED"
+    #         status['message'] = "%s %s created successfully" % (resource_type, resource_name)
+    #     else:
+    #         status['status'] = "FAILED"
+    #         status['message'] = ""
+    #
+    #     return status
 
-        msg = ""
-        if status['message']:
-            msg = status['message']
-        if status['error_message']:
-            msg = status['error_message']
-
-        if 'time' in status:
-            print(status['resource_name'], "Time:", status['time'])
-
-        return "status: %s for %s resource %s: %s" % \
-            (status['status'], status['resource'], status['resource_name'], msg)
-
-
-    def set_status(self, code, resource_type, resource_name, error=""):
-        status = dict()
-        status['resource'] = resource_type
-        status['resource_name'] = resource_name
-        status['code'] = code
-        status['error_message'] = error
-        if code == 200:
-            status['status'] = "SUCCESS"
-            status['message'] = "%s %s already exists" % (resource_type, resource_name)
-        elif code == 201:
-            status['status'] = "COMPLETED"
-            status['message'] = "%s %s created successfully" % (resource_type, resource_name)
-        else:
-            status['status'] = "FAILED"
-            status['message'] = ""
-
-        return status
 
 class ONTAPCmds(Base):
     ''' top level dispatcher for list, create, delete commands '''
@@ -303,6 +302,7 @@ class ListCmds(Base):
         if error_message:
             print("ERROR:", error_message)
 
+
 class CreateCmds(ONTAPCmds):
     ''' support for create commands:
         create volumes
@@ -353,6 +353,7 @@ class CreateCmds(ONTAPCmds):
         status, vol_size = ontap.create_clone(args.vol_name, args.uid, args.gid,
                                               args.clone_name, args.snapshot_name)
         print("Create clone", status, vol_size)
+
 
 class DeleteCmds(Base):
     ''' support for list commands:

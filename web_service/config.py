@@ -3,30 +3,55 @@ import os
 
 class BaseConfig:
     """Base configuration"""
-    DEBUG = False
+    DEBUG = True
     TESTING = False
-    DATABASE_URL=os.getenv('DATABASE_URL','build-at-scale-couchdb.default:5984')
-    DATABASE_USER = os.getenv('DATABASE_USER','admin')
-    DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD','admin')
-    DATABASE_NAME = os.getenv('DATABASE_NAME', 'build_at_scale')
-    BUILD_AT_SCALE_VERSION = os.getenv('BUILD_AT_SCALE_VERSION', 'latest')
-    # The below ontap variables are only used once when configuring build@scale for the first time
+    DEV = True
+    # The below ontap variables are only used once when configuring devops@scale for the first time
     # Therafter , this information is retrieved from couchdb
-    ONTAP_API = os.getenv('ONTAP_API','')
-    ONTAP_APIUSER = os.getenv('ONTAP_APIUSER','')
-    ONTAP_APIPASS = os.getenv('ONTAP_APIPASS','')
-    ONTAP_SVM_NAME = os.getenv('ONTAP_SVM_NAME','')
-    ONTAP_AGGR_NAME = os.getenv('ONTAP_AGGR_NAME','')
-    ONTAP_DATA_IP = os.getenv('ONTAP_DATA_IP','')
-    SCM_TYPE = os.getenv('SCM_TYPE','')
-    REGISTRY_TYPE = os.getenv('REGISTRY_TYPE','')
-    SERVICE_TYPE = os.getenv('SERVICE_TYPE','')
+    # TODO: Should the DevOps Admin be able to set all the configuration document parameters through ENV variables?
+
+    # ONTAP
+    ONTAP_SVM_NAME = os.getenv('ONTAP_SVM_NAME', 'ci_dev')
+    ONTAP_AGGR_NAME = os.getenv('ONTAP_AGGR_NAME', 'olb03_sat1')
+    ONTAP_DATA_IP = os.getenv('ONTAP_DATA_IP', '10.193.8.78')
+
+    # SCM
+    SCM_SERVICE_NAME = os.getenv('SCM_SERVICE_NAME', 'devops-at-scale-gitlab')
+    SCM_PVC_NAME = os.getenv('SCM_PVC_NAME', 'devops-at-scale-gitlab-pvc')
+
+    # Jenkins
+    JENKINS_SERVICE_NAME = os.getenv('JENKINS_SERVICE_NAME', 'devops-at-scale-jenkins')
+
+    # Database CouchDB
+    DATABASE_SERVICE_NAME = os.getenv('DATABASE_SERVICE_NAME', 'devops-at-scale-couchdb')
+    # default username, password
+    DATABASE_USER = os.getenv('DATABASE_USER', 'admin')
+    DATABASE_PASS = os.getenv('DATABASE_PASS', 'admin')
+    DATABASE_NAME = os.getenv('DATABASE_NAME', 'devops_at_scale')
+
+    # Artifactory
+    REGISTRY_SERVICE_NAME = os.getenv('DATABASE_SERVICE_NAME', 'devops-at-scale-artifactory')
+    REGISTRY_TYPE = os.getenv('REGISTRY_TYPE', 'artifactory')
+
+    # Webservice
+    WEB_SERVICE_NAME = os.getenv('WEB_SERVICE_NAME', 'devops-at-scale-webservice')
+
 
 class TestingConfig(BaseConfig):
     """Testing configuration"""
     DEBUG = True
     TESTING = True
-    DATABASE_NAME = 'test_build_at_scale'
+    DATABASE_NAME = 'test_devops_at_scale'
+    DATABASE_URL = 'test_devops_at_scale'
+    DATABASE_PASS = 'test_devops_at_scale'
+
+
+class DevConfig(BaseConfig):
+    """Testing configuration"""
+    DEBUG = True
+    DEV = True
+    DATABASE_NAME = 'devops_at_scale'
+
 
 class ProductionConfig(BaseConfig):
     """Production configuration"""

@@ -1,0 +1,41 @@
+---
+- hosts: master
+  gather_facts: false
+  vars:
+    ontap_mgmt_ip_address: "{{ netapp_hostname }}"
+
+  tasks:
+  - name: echo
+    command: kubectl version
+    register: result
+
+  - debug:
+      var: result.stdout
+
+  - name: check authentication rights
+    command: kubectl auth can-i '*' '*' --all-namespaces
+    register: result
+
+  - debug:
+      var: result.stdout
+
+  - fail: msg="authentication requirements not met"
+    when: result.stdout != "yes"
+
+  - name: check connectivity to image registry and NetApp storage system
+    command: kubectl run -i --tty ping --image=busybox --restart=Never --rm -- ping -c 10 {{ ontap_mgmt_ip_address }}
+    register: result
+
+  - debug:
+      var: result.stdout
+
+  - set_fact:
+      # (?s) for matching newlines with .*
+      packet_loss: "{{ result.stdout | regex_replace('(?s)^.*received, (\\d+)% packet loss.*$', '\\1') }}"
+
+  - debug:
+      var: packet_loss
+
+  - fail: msg="connectivity requirements not met"
+    when: packet_loss | int > 10
+

@@ -1,0 +1,6 @@
+netapp_hostname: 1.1.1.1 
+netapp_username: <username>
+netapp_password: <password>
+netapp_data_ip: 1.1.1.2
+netapp_svm: <svm_name> 
+

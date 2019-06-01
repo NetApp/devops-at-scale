@@ -1,0 +1,4 @@
+[all]
+hostname_master.domain.com ansible_ssh_user=<username> ansible_ssh_pass=<password> kubernetes_role="master"
+hostname_worker1.domain.com ansible_ssh_user=<username> ansible_ssh_pass=<password> kubernetes_role="node"
+hostname_worker2.domain.com ansible_ssh_user=<username> ansible_ssh_pass=<password> kubernetes_role="node"

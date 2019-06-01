@@ -2,22 +2,22 @@
 import logging
 from flask import Blueprint, jsonify, request, render_template
 from flask import current_app as app
-from web_service.ontap.ontap_service import OntapService
 from web_service.helpers import helpers
 from web_service.helpers.errors import GenericException
 from web_service.kub.KubernetesAPI import KubernetesAPI
 from web_service.jenkins.jenkins_api_secure import JenkinsAPI
-from web_service.database.project import Project
+from web_service.database.pipeline import Pipeline
 from web_service.database.snapshot import Snapshot
 from web_service.database.workspace import Workspace
 import web_service.database.database as Database
 from web_service.database.user import User
 import web_service.database.workspace as workspace_obj
-import web_service.database.snapshot as snapshot
 import time
-from pdb import set_trace as bp
-import requests
+from couchdb import http
 import traceback
+
+# TODO: Make exceptions specific
+#   Should all exceptions be rendered to views.py?
 
 backend_blueprint = Blueprint(
     'backend',
@@ -29,6 +29,18 @@ backend_blueprint = Blueprint(
     # HTTP 4xx -- client-side error
     # HTTP 5xx -- server-side error
 '''
+
+
+@backend_blueprint.before_app_first_request
+def setup():
+    print("Before First request, calling one time couchDB setup")
+    helpers.onetime_setup_required()
+    response_object = {
+        'status': 'success',
+        'message': 'One time setup for Devops@Scale has been completed!'
+
+    }
+    return jsonify(response_object), 200
 
 
 @backend_blueprint.route('/backend/', methods=['GET'])
@@ -45,9 +57,10 @@ def index():
     """
     response_object = {
         'status': 'success',
-        'message': 'Welcome to the Build@Scale backend!'
+        'message': 'Welcome to the DevOps@Scale backend!'
 
     }
+    # TODO: Show dashboard by default
     return jsonify(response_object), 200
 
 
@@ -63,17 +76,185 @@ def version():
         description: return version information for this application
 
     """
-    version = app.config['BUILD_AT_SCALE_VERSION']
+    current_version = app.config['BUILD_AT_SCALE_VERSION']
     response_object = {
         'status': 'success',
-        'message': "Build@Scale version: %s" % version
+        'message': "Build@Scale version: %s" % current_version
 
     }
     return jsonify(response_object), 200
 
 
+def _get_config_from_db():
+    # TODO: Should this method belong to database.py? Iff Exceptions can be redirected to web server
+    """
+    Helper method to establish a DB connection and fetch the configuration document
+    Throws an exception if connection fails
+
+    :raises GenericException 500 if DB connection fails
+    :raises GenericException 500 if config document not found
+    :return: DB Connection handler and Config document from the DB
+    """
+    # Retrieve customer configuration document from database
+    try:
+        connector = helpers.connect_db()
+        config_document = helpers.get_db_config()
+    except Exception as exc:
+        raise GenericException(500,
+                               GenericException.DB_CONNECTION_ERROR,
+                               "Database Exception")
+    if not config_document:
+        raise GenericException(500,
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
+                               "Database Exception")
+    return connector, config_document
+
+
+def _validate_input_form_params(form, required):
+    """
+    Validate if all required params are input in the web form
+    :raises GenericException if one or more keys are missing
+    :param form: input params from the web form
+    :param required: required params for the API call
+    :return: None
+    """
+    missing_params = helpers.check_for_missing_params(form, required)
+    if len(missing_params) > 0:
+        raise GenericException(400, "The following parameters " + str(missing_params) + " are required")
+
+
+def _populate_workspace_details(workspace, input_form, config, merge):
+
+    # Retrieve user document from db
+    try:
+        user_doc = helpers.get_db_user_document(request.form['username'])
+    except:
+        raise GenericException(500, "Error retrieving user information from database", "Database Exception")
+
+    workspace['name'] = '-'.join([input_form['workspace-name'],
+                                  request.form['username'],
+                                  '-'.join(workspace['pipeline'].split('-')[1:]),  # extract project name from pipeline
+                                  helpers.return_random_string(4)])
+    # User details
+    workspace['uid'] = user_doc['uid']
+    workspace['gid'] = user_doc['gid']
+    workspace['user_email'] = user_doc['email']
+    workspace['username'] = input_form['username']
+    # IDE deployment details
+    workspace['pod_image'] = config['workspace_pod_image']
+    workspace['build_cmd'] = "No build commands have been specified for this project"
+    workspace['service_type'] = config['services_type']
+
+
+def _complete_kubernetes_setup_for_workspace(workspace, merge=False):
+    try:
+        kube = KubernetesAPI()
+        kube_pvc_pod_response = kube.create_pvc_and_pod(workspace, merge)
+    except Exception as exc:
+        logging.error("Unable to create Kubernetes Workspace PVC/Pod: %s" % traceback.format_exc())
+        raise GenericException(500, "Unable to create Kubernetes Workspace PVC/Pod")
+
+    if not helpers.verify_successful_response(kube_pvc_pod_response):
+        logging.error("Unable to create Kubernetes Workspace PVC/Pod: %s" % kube_pvc_pod_response)
+        raise GenericException(500, "Unable to create Kubernetes Workspace PVC/Pod")
+
+    # workspace['clone_name'] is populated from KubernetesAPI (retrieved from PV-PVC mapping)
+    workspace['clone_mount'] = "/mnt/" + workspace['clone_name']
+
+    # Wait for IDE to be ready before returning
+    # TODO: Change this to wait and proceed only when service is in Ready state (geta an IP assigned)
+    try:
+        time.sleep(60)
+        workspace['ide'] = kube.get_service_url(workspace['service'])
+    except:
+        workspace['ide'] = "NA"
+        logging.warning("WARNING: Unable to retrieve workspace URL")
+
+    # Wait for pod to be ready before executing any commands
+    # TODO: Add logic to proceed only when pod status is 'Running'
+    # Set git user.email and user.name , we don't care if the command fails
+    git_user_cmd = 'git config --global user.name %s' % request.form['username']
+    git_email_cmd = 'git config --global user.email %s' % workspace['user_email']
+    try:
+        kube.execute_command_in_pod(workspace['pod'], 'default', git_user_cmd)
+        kube.execute_command_in_pod(workspace['pod'], 'default', git_email_cmd)
+    except:
+        logging.warning("WARNING: Unable to configure GIT Username/Email on behalf of user: %s" %
+                        traceback.format_exc())
+
+
+def _record_new_workspace(db, workspace, merge=False):
+    try:
+        new_ws_document = Workspace(name=workspace['name'],
+                                    clone=workspace['clone_name'],
+                                    mount=workspace['clone_mount'],
+                                    pipeline=workspace['pipeline'],
+                                    username=workspace['username'],
+                                    uid=workspace['uid'],
+                                    gid=workspace['gid'],
+                                    source_pvc=workspace['source_pvc'],
+                                    build_name=workspace['build_name'],
+                                    pod=workspace['pod'],
+                                    pvc=workspace['pvc'],
+                                    pv=workspace['pv_name'],
+                                    service=workspace['service'],
+                                    ide_url=workspace['ide'])
+        if merge:
+            new_ws_document.source_workspace_pvc = workspace['source_workspace_pvc']
+        new_ws_document.store(db)
+    except http.ResourceConflict as exc:
+        raise GenericException(500,
+                               "Error recording new workspace in the DB, please contact your administrator",
+                               "Database Exception")
+
+
+def _setup_workspace(input_form, merge=False):
+    # Retrieve customer configuration document from database
+    connect, config = _get_config_from_db()
+
+    # Validate if user hasn't exceeded the workspace limit
+    try:
+        exceeded, workspaces = workspace_obj.exceeded_workspace_count_for_user(input_form['username'],
+                                                                               config['user_workspace_limit'])
+        logging.debug("Workspace limit details:: %s %s" % (exceeded, str(workspaces)))
+    except Exception as exc:
+        logging.warning("WARNING: Unable to check user workspace limit (%s)  " % traceback.format_exc())
+    if exceeded is True:
+        raise GenericException(401, "User workspace limit of %s exceeded. "
+                                    "Please delete one or more workspace(s) from %s and re-try"
+                               % (config['user_workspace_limit'], workspaces))
+
+    # setup initial workspace params
+    workspace = dict()
+    if merge:
+        # Retrieve project name from source_workspace document
+        try:
+            source_ws_document = Database.get_document_by_name(connect, request.form['source-workspace-name'])
+        except:
+            error_msg = "Error retrieving source workspace information from database"
+            logging.error("%s: %s" % (error_msg, traceback.format_exc()))
+            raise GenericException(500, error_msg, "Database Exception")
+        # populate the workspace details
+        workspace['source_workspace_name'] = input_form['source-workspace-name']
+        workspace['pipeline'] = source_ws_document['pipeline']
+        workspace['build_name'] = request.form['build-name']
+    else:
+        workspace['pipeline'] = request.form['pipeline-name']
+        # strip build_status and retain only the build_name
+        workspace['build_name'] = request.form['build-name-with-status'].rsplit('_', 1)[0]
+
+    _populate_workspace_details(workspace, input_form, config, merge)
+
+    # Create Kube PVC, Pod, Service, and execute commands in Pod to complete workspace setup
+    _complete_kubernetes_setup_for_workspace(workspace, merge)
+
+    # Record new workspace document in DB
+    _record_new_workspace(db=connect, workspace=workspace, merge=merge)
+
+    return workspace
+
+
 @backend_blueprint.route('/backend/workspace/create', methods=['POST'])
-@helpers.setup_required
 def workspace_create():
     """
     create developer workspace pod
@@ -87,7 +268,7 @@ def workspace_create():
         description: Name of the workspace being created
         type: string
       - in: path
-        name: build-name
+        name: build-name-with-status
         required: true
         description: build name (e.g. snapshot) from which clone should be created
         type: string
@@ -97,171 +278,30 @@ def workspace_create():
         description: username
         type: string
      - in: path
-       name: project-name
+       name: pipeline-name
        required: true
-       description: the project/pipeline name
+       description: pipeline name of the SCM project
        type: string
     responses:
       200:
         description: workspace created successfully
 
     """
-    # Retrieve customer configuration document from database
-    try:
-        database = helpers.connect_db()
-        config_document = helpers.get_db_config()
-    except Exception as e:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    if not config_document:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
+    # Validate input form parameters
+    _validate_input_form_params(request.form, ['workspace-name', 'build-name-with-status', 'username', 'pipeline-name'])
 
-    expected_keys = ['workspace-name',
-                     'build-name', 'username', 'project-name']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(
-            400, "workspace-name, build-name, project-name and username are required")
+    workspace = _setup_workspace(request.form)
 
-    username = request.form['username']
-    try:
-        user_doc = helpers.get_db_user_document(username)
-        uid = user_doc['uid']
-        gid = user_doc['gid']
-        email = user_doc['email']
-    except:
-        raise GenericException(
-            500, "Error retrieving user information from database", "Database Exception")
+    logging.debug("Workspace details:: %s" % str(workspace))
+    return render_template('workspace_details.html', message="Workspace created successfully",
+                           ontap_data_ip=app.config['ONTAP_DATA_IP'],
+                           ontap_volume_name=workspace['clone_name'], workspace_ide=workspace['ide']), 200
 
-    try:
-        exceeded, workspaces = workspace_obj.exceeded_workspace_count_for_user(
-            uid, config_document['user_workspace_limit'])
-    except Exception as exc:
-        logging.warning("WARNING: Unable to check user workspace limit (%s)  " %
-                        traceback.format_exc())
-    if exceeded is True:
-        raise GenericException(
-            401, "Please delete one or more workspace(s) from %s and re-try" % workspaces)
-    # populate the workspace details
-    namespace = 'default'
-    workspace = dict()
-    workspace['project'] = request.form['project-name']
-    workspace['snapshot'] = request.form['build-name']
-    volume_name = request.form['volume-name']
-    workspace['clone'] = volume_name + \
-        "_workspace" + helpers.return_random_string(4)
-    workspace['kb_clone_name'] = helpers.replace_kube_invalid_characters(
-        workspace['clone'])
-    workspace['uid'] = uid
-    workspace['gid'] = gid
-    workspace['username'] = username
-    workspace['clone_size_mb'] = "900"
-    workspace['pod_image'] = config_document['workspace_pod_image']
-    workspace['clone_mount'] = "/mnt/" + workspace['kb_clone_name']
-    workspace['build_cmd'] = "No build commands have been specified for this project"
-    workspace['service_type'] = config_document['service_type']
-
-    try:
-        ontap_instance = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                                      config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
-        ontap_data_ip = ontap_instance.data_ip
-        status, vol_size = ontap_instance.create_clone(volume_name,
-                                                       workspace['uid'], workspace['gid'],
-                                                       workspace['clone'], workspace['snapshot'])
-    except Exception as exc:
-        logging.error("Unable to create ontap workspace clone volume: %s" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to create ontap workspace clone volume")
-
-    if not helpers.verify_successful_response(status):
-        logging.error("ONTAP Clone Creation Error: %s", repr(status))
-        return render_template('error.html', error="Workspace clone creation error"), 400
-    try:
-        kube = KubernetesAPI()
-    except Exception as exc:
-        logging.error("Unable to connect to Kubernetes: %s" %
-                      traceback.format_exc())
-        raise GenericException(500, "Unable to connect to Kubernetes")
-    try:
-
-        kube_pv_pvc_pod_response = kube.create_pv_and_pvc_and_pod(workspace, vol_size,
-                                                                  'default', ontap_data_ip)
-    except Exception as exc:
-        logging.error("Unable to create Kubernetes Workspace PV/PVC/Pod: %s" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to create Kubernetes Workspace PV/PVC/Pod")
-
-    for response in kube_pv_pvc_pod_response:
-        status.append(response)
-
-    if not helpers.verify_successful_response(status):
-        logging.error(
-            "Unable to create Kubernetes Workspace PV/PVC/Pod: %s" % response)
-        raise GenericException(
-            500, "Unable to create Kubernetes Workspace PV/PVC/Pod")
-
-    workspace_pod = workspace['kb_clone_name'] + "-pod"
-
-
-    # Record new workspace in database
-    try:
-        new_ws_document = Workspace(name=workspace['clone'],
-                                    project=workspace['project'],
-                                    username=workspace['username'],
-                                    uid=workspace['uid'],
-                                    gid=workspace['gid'],
-                                    parent_snapshot=workspace['snapshot'],
-                                    pod_name=workspace_pod)
-        new_ws_document.store(database)
-    except Exception:
-        raise GenericException(500,
-                               "Error recording new workspace in the DB, \
-                               please contact your administrator",
-                               "Database Exception")
-    # Wait for pod to be ready before executing any commands
-    time.sleep(15)
-    # Set git user.email and user.name , we don't care if the command fails
-    git_user_cmd = [
-        'git',
-        'config',
-        '--global',
-        'user.name',
-        username
-    ]
-    git_email_cmd = [
-        'git',
-        'config',
-        '--global',
-        'user.email',
-        email
-    ]
-    try:
-        response = kube.execute_command_in_pod(
-            workspace_pod, namespace, git_user_cmd)
-        response = kube.execute_command_in_pod(
-            workspace_pod, namespace, git_email_cmd)
-    except:
-        logging.warning("WARNING: Unable to configure GIT Username/Email on behalf of user: %s" %
-                        traceback.format_exc())
-    # Wait for IDE to be ready before returning
-    try:
-        time.sleep(60)
-        workspace_ide = kube.get_service_url(workspace['kb_clone_name'] + "-service")
-    except:
-        workspace_ide = "NA"
-        logging.warning("WARNING: Unable to retrieve workspace URL")
-    message = "Workspace created successfully!"
-    return render_template('workspace_details.html',message=message, ontap_data_ip=ontap_data_ip,ontap_volume_name=workspace['clone'],workspace_ide=workspace_ide), 200
 
 @backend_blueprint.route('/backend/workspace/merge', methods=['POST'])
-@helpers.setup_required
 def workspace_merge():
     """
-    merge developer workspace pod
+    Merge developer workspace pod
     ---
     tags:
       - workspace
@@ -291,199 +331,39 @@ def workspace_merge():
         description: merge workspace created successfully
 
     """
-    # Retrieve customer configuration document from database
-    try:
-        database = helpers.connect_db()
-        config_document = helpers.get_db_config()
-    except Exception as e:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    if not config_document:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    expected_keys = ['workspace-name', 'build-name',
-                     'username', 'source-workspace-name']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(
-            400, "workspace-name, build-name, username and source-workspace-name are required")
+    # Validate input web form parameters from the application
+    _validate_input_form_params(request.form, ['workspace-name', 'build-name', 'username', 'source-workspace-name'])
 
-    username = request.form['username']
+    workspace = _setup_workspace(request.form, merge=True)
+
+    # Run the merge commands in the new workspace. source ws will be mounted at /source_workspace/git
+    # Destination ws will be mounted at /workspace/git
+    merge_cmd = '/usr/local/bin/build_at_scale_merge.sh /source_workspace/git /workspace/git'
     try:
-        user_doc = helpers.get_db_user_document(username)
-        uid = user_doc['uid']
-        gid = user_doc['gid']
-        email = user_doc['email']
+        response = KubernetesAPI().execute_command_in_pod(workspace['pod'], 'default', merge_cmd)
     except:
-        raise GenericException(
-            500, "Error retrieving user information from database", "Database Exception")
-
-    try:
-        exceeded, workspaces = workspace_obj.exceeded_workspace_count_for_user(
-            uid, config_document['user_workspace_limit'])
-    except Exception as exc:
-        logging.warning("WARNING: Unable to check user workspace limit (%s)  " %
-                        traceback.format_exc())
-    if exceeded is True:
-        raise GenericException(
-            401, "User workspace limit exceeded , please delete one or more workspace(s) from %s and re-try" % workspaces)
-
-    # retrieve project name from on source-workspace document
-    try:
-        source_ws_document = Database.get_document_by_name(
-            database, request.form['source-workspace-name'])
-        project = source_ws_document['project'].rstrip()
-    except:
-        error_msg = "Error retrieving source workspace information from database"
-        logging.error("%s: %s" % (error_msg, traceback.format_exc()))
-        raise GenericException(500, error_msg, "Database Exception")
-
-    # populate the workspace details
-    workspace = dict()
-    workspace['source_workspace_name'] = helpers.replace_kube_invalid_characters(
-        request.form['source-workspace-name'])
-    namespace = 'default'
-    workspace['project'] = project
-    workspace['snapshot'] = request.form['build-name']
-    volume_name = helpers.replace_ontap_invalid_char(workspace['project'])
-    workspace['clone'] = volume_name + \
-        "_workspace" + helpers.return_random_string(4)
-    workspace['kb_clone_name'] = helpers.replace_kube_invalid_characters(
-        workspace['clone'])
-    workspace['uid'] = uid
-    workspace['gid'] = gid
-    workspace['username'] = username
-    workspace['clone_size_mb'] = "900"
-    workspace['pod_image'] = config_document['workspace_pod_image']
-    workspace['clone_mount'] = "/mnt/" + workspace['kb_clone_name']
-    workspace['build_cmd'] = "No build commands have been specified for this project"
-    workspace['service_type'] = config_document['service_type']
-
-    try:
-        ontap_instance = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                                      config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
-        ontap_data_ip = ontap_instance.data_ip
-
-        status, vol_size = ontap_instance.create_clone(volume_name,
-                                                       workspace['uid'], workspace['gid'],
-                                                       workspace['clone'], workspace['snapshot'])
-    except Exception as exc:
-        logging.error("Unable to create ontap workspace clone volume: %s" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to create ontap workspace clone volume")
-
-    if not helpers.verify_successful_response(status):
-        logging.error("ONTAP Clone Creation Error: %s", repr(status))
-        return render_template('error.html', error="Workspace clone creation error"), 400
-
-    try:
-        kube = KubernetesAPI()
-    except Exception as exc:
-        logging.error("Unable to connect to Kubernetes: %s" %
-                      traceback.format_exc())
-        raise GenericException(500, "Unable to connect to Kubernetes")
-    try:
-        kube_pv_pvc_pod_response = kube.create_pv_and_pvc_and_pod(workspace, vol_size,
-                                                                  'default', ontap_data_ip)
-    except Exception as exc:
-        logging.error("Unable to create Kubernetes Workspace PV/PVC/Pod: %s" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to create Kubernetes Workspace PV/PVC/Pod")
-    for response in kube_pv_pvc_pod_response:
-        status.append(response)
-
-    if not helpers.verify_successful_response(status):
-        logging.error(
-            "Unable to create Kubernetes Workspace PV/PVC/Pod: %s" % response)
-        raise GenericException(
-            500, "Unable to create Kubernetes Workspace PV/PVC/Pod")
-
-    workspace_pod = workspace['kb_clone_name'] + "-pod"
-    try:
-        workspace_ide = kube.get_service_url(
-            workspace['kb_clone_name'] + "-service")
-    except Exception as exc:
-        logging.error("Unable to determine workspace kubernetes service url: %s" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to determine workspace kubernetes service url, please contact your administrator")
-
-    # Record new workspace in database
-    try:
-        new_ws_document = Workspace(name=workspace['clone'],
-                                    project=workspace['project'],
-                                    username=workspace['username'],
-                                    uid=workspace['uid'],
-                                    gid=workspace['gid'],
-                                    parent_snapshot=workspace['snapshot'],
-                                    pod_name=workspace_pod)
-        new_ws_document.store(database)
-    except Exception:
-        raise GenericException(500,
-                               "Error recording new workspace in the DB, please contact your administrator",
-                               "Database Exception")
-
-    # Wait for pod to be ready before executing any commands
-    time.sleep(180)
-    # Set git user.email and user.name , we don't care if the command fails
-    git_user_cmd = [
-        'git',
-        'config',
-        '--global',
-        'user.name',
-        username
-    ]
-    git_email_cmd = [
-        'git',
-        'config',
-        '--global',
-        'user.email',
-        email
-    ]
-    try:
-        response = kube.execute_command_in_pod(
-            workspace_pod, namespace, git_user_cmd)
-        response = kube.execute_command_in_pod(
-            workspace_pod, namespace, git_email_cmd)
-    except:
-        logging.warning("WARNING: Unable to configure GIT Username/Email on behalf of user: %s" %
-                        traceback.format_exc())
-
-    # run the merge commands in the new workspace
-    # source ws will be mounted at /source_workspace/git
-    # destination ws will be mounted at /workspace/git
-    merge_cmd = [
-        '/usr/local/bin/build_at_scale_merge.sh',
-        '/source_workspace/git',
-        '/workspace/git']
-    try:
-        response = kube.execute_command_in_pod(
-            workspace_pod, namespace, merge_cmd)
-    except:
-        logging.error("Unable to successfully complete git merge !" %
-                      traceback.format_exc())
-        raise GenericException(
-            500, "Unable to successfully complete merge ! , please contact your administrator")
+        logging.error("Unable to successfully complete git merge !" % traceback.format_exc())
+        raise GenericException(500, "Unable to successfully complete merge!. Please contact your administrator")
 
     if response == "0":
         message = "Merge workspace created successfully!"
+        logging.info("Response from workspace POD:: %s" % response)
     elif response == "1":
-        message = "Merge workspace created successfully but merge conflicts were found. Please check the workspace for conflicts which need to be resolved"
+        message = "Merge workspace created successfully but merge conflicts were found. " \
+                  "Please check the workspace for conflicts which need to be resolved"
+        logging.warning("Response from workspace POD:: %s" % response)
     else:
-        raise GenericException(
-            500, "Unable to successfully complete merge ! , please contact your administrator")
-    # Wait for IDE to be ready before returning
-    time.sleep(5)
-    return render_template('workspace_details.html',message=message, ontap_data_ip=ontap_data_ip,ontap_volume_name=workspace['clone'],workspace_ide=workspace_ide), 200
+        logging.error("Response from workspace POD:: %s" % response)
+        raise GenericException(500, "Unable to successfully complete merge ! , please contact your administrator")
+
+    return render_template('workspace_details.html', message=message,
+                           ontap_volume_name=workspace['clone_name'], workspace_ide=workspace['ide']), 200
+
 
 @backend_blueprint.route('/backend/workspace/delete', methods=['POST'])
-@helpers.setup_required
 def workspace_delete():
     """
-    delete developer workspace pod
+    Delete developer workspace PVC, PV, Clone, Kube service and Kube pod
     ---
     tags:
       - workspace
@@ -499,27 +379,18 @@ def workspace_delete():
         description:  workspace deleted successfully
 
     """
-    # Retrieve customer configuration document from database
-    try:
-        database = helpers.connect_db()
-        config_document = helpers.get_db_config()
-    except Exception as e:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    if not config_document:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    expected_keys = ['workspace-name']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(
-            400, "workspace-name is required")
+    #####
+    # 1. Validate input form parameters
+    # 2. Delete workspace PVC (Trident deletes associated PV and ONTAP clone)
+    # 3. Delete workspace DB document
+    #####
+    # Validate input form parameters
+    _validate_input_form_params(request.form, ['workspace-name'])
+
     try:
         helpers.delete_workspace(request.form['workspace-name'])
     except Exception as exc:
-        logging.error("Unable to create Kubernetes Workspace PV/PVC/Pod: %s" %
-                      traceback.format_exc())
+        logging.error("Unable to create Kubernetes Workspace PV/PVC/Pod: %s" % traceback.format_exc())
         raise GenericException(500, "Unable to delete workspace %s" % request.form['workspace-name'])
     response_object = {
         'status': 'success',
@@ -528,12 +399,11 @@ def workspace_delete():
     return jsonify(response_object), 200
 
 
-
-@backend_blueprint.route(
-    '/backend/workspace/purge', methods=['POST'])
+@backend_blueprint.route('/backend/workspace/purge', methods=['POST'])
 def workspace_purge():
     """
-    purge workspaces greater than workspace_purge_limit set in project config
+    Purge workspaces older than workspace_purge_limit days
+    The workspace limit is setup in the project's initial configuration
     ---
     tags:
       - workspace
@@ -541,7 +411,7 @@ def workspace_purge():
 
     responses:
       200:
-        description: workspace was modified successfully
+        description: workspaces have been purged successfully
 
     """
     count, purged_workspaces = workspace_obj.purge_old_workspaces()
@@ -554,24 +424,25 @@ def workspace_purge():
     return jsonify(response)
 
 
-@backend_blueprint.route('/backend/project/create', methods=['POST'])
-@helpers.setup_required
-def project_create():
+@backend_blueprint.route('/backend/pipeline/create', methods=['POST'])
+def pipeline_create():
     """
-    create project
+    Setup a pipeline for an SCM project with a specific branch
+    This endpoint is used by the DevOps admin
+    At the end of successful execution, a Jenkins pipeline for the SCM project is created with required build parameters
     ---
     tags:
-      - project
+      - pipeline
     parameters:
       - in: path
         name: scm-url
         required: true
-        description: git url for this project
+        description: SCM url for this project
         type: string
       - in: path
         name: scm-branch
         required: true
-        description: git branch for this project
+        description: SCM branch for this project
         type: string
       - in: path
         name: export-policy
@@ -580,313 +451,232 @@ def project_create():
         type: string
     responses:
       200:
-        description: project was created successfully
+        description: Pipeline has been created successfully
 
     """
-    # Retrieve customer configuration document from database
+    #####
+    # 1. Validate input form parameters
+    # 2. Get config document for setting up the pipeline details
+    # 3. Gather storage details for creating PVC for this pipeline
+    # 4. Create a Kube PVC (Trident creates a PV and an ONTAP volume, maps it to this PVC. We manage only the PVCs)
+    # 5. Create Jenkins job
+    # 6. Setup Jenkins purge job for this pipeline
+    # 7. Record all pipeline details in database
+    #####
+    # Validate input web form parameters from the application
+    _validate_input_form_params(request.form, ['scm-branch', 'scm-url'])
 
-    try:
-        database = helpers.connect_db()
-        config_document = helpers.get_db_config()
-    except Exception as e:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    if not config_document:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    expected_keys = ['scm-branch', 'scm-url']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(400, "SCM URL and SCM Branch are required")
+    connect, config = _get_config_from_db()
 
+    # Gather storage details for creating PVC
     scm_project_url = helpers.sanitize_scm_url(request.form['scm-url'])
-
     if scm_project_url is None:
         raise GenericException(406, "Invalid SCM URL provided")
+    pipeline = {
+        'name': '-'.join(['pipeline',
+                         helpers.extract_name_from_git_url(request.form['scm-url']),
+                         request.form['scm-branch']]),
+        'export_policy': request.form.get('export-policy', 'default'),  # set default export policy if not specified
+        'scm_url': scm_project_url
+    }
 
-    project_name = helpers.extract_name_from_git_url(request.form['scm-url'])
-    project_name += "-" + request.form['scm-branch']
-    # Kubernetes does not like _
-    project_name = helpers.replace_kube_invalid_characters(project_name)
-    # ONTAP does not like -
-    project_name_no_dashes = helpers.replace_ontap_invalid_char(project_name)
+    # Create PVC. Once we create a Kube PVC, Trident creates an ONTAP volume and a PV for this PVC
+    kube = KubernetesAPI()
+    vol_size = "10000"  # set default vol size to 10Gig, 10000 in MB
+    storage_class = config.get('storage_class', 'basic')  # set default storage class if not specified
+    pvc_response = kube.create_pvc_resource(vol_name=pipeline['name'],
+                                            vol_size=vol_size,
+                                            storage_class=storage_class)
+    if not helpers.verify_successful_response(pvc_response):
+        raise GenericException(500, "Kubernetes PVC creation error")
 
-    ontap_instance = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                                  config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
-    ontap_data_ip = ontap_instance.data_ip
-    vol_uid = "0"
-    vol_gid = "0"
-    vol_size = "10000"
-    if 'export_policy' in request.form:
-        vol_export_policy = request.form['export-policy']
-    else:
-        vol_export_policy = 'default'
+    # setup params for Jenkins pipeline job
+    pipeline_job = helpers.set_jenkins_job_params('ci-pipeline')
+    pipeline_job['volume_claim_name'] = pvc_response['name']
+    pipeline_job['scm_url'] = request.form['scm-url']
+    pipeline_job['scm_branch'] = request.form['scm-branch']
+
+    # TODO: should this volume_name be populated as part of pvc_response? -
+    #  but might want to handle if PVC creation has failed in KubernetesAPI.py
+    pipeline_job['volume_name'] = kube.get_volume_name_from_pvc(pvc_response['name'])  # Get associated volume with PVC
+    # TODO: This cannot be None.
+    #  Validate after bootstrapping, PVCs for all services to be part of the config document.
+    #  Remove this after including validation
+    if config.get('scm_pvc_name') is None:
+        pipeline_job['scm_volume_claim'] = kube.get_kube_resource_name(config['scm_volume'], 'pvc')
+
+    purge_job = helpers.set_jenkins_job_params('trigger-purge')  # setup params for Jenkins purge job
+
+    # Create Jenkins CI and purge jobs for this pipeline
     try:
-        status, vol_size = ontap_instance.create_volume(project_name_no_dashes,
-                                                        vol_size, vol_uid, vol_gid, vol_export_policy)
-    except Exception as e:
-        error_message = "Unable to create backing ontap volume for pipeline"
-        logging.error("Unable to create backing ontap volume for pipeline:\n %s" %
-                      traceback.format_exc())
-        raise GenericException(500, error_message)
-
-    if not helpers.verify_successful_response(status):
-        error_message = "Unable to create backing ontap volume for pipeline: "
-        try:
-            error = status[0]['error_message'].split('(', 1)[0]
-        except KeyError:
-            error = ''
-        error_message = error_message + error
-        raise GenericException(500, error_message)
-
-     # if volume creation successful, autosupport log
-     # display a warning if this step fails , we don't want to exit out
-    try:
-        pass
-        # helpers.autosupport(project_name_no_dashes, vol_size)
-    except Exception as e:
-        logging.warning(
-            "WARNING: Unable to generate autosupport log (%s)  " % str(e))
-
-    kube_namespace = 'default'
-    pv_and_pvc_responses = KubernetesAPI().create_pv_and_pvc(
-        project_name, vol_size,
-        kube_namespace,
-        ontap_data_ip)
-
-    for response in pv_and_pvc_responses:
-        status.append(response)
-
-    if not helpers.verify_successful_response(status):
-        raise GenericException(500, "Kubernetes PV/PVC Error")
-
-    try:
-        jenkins = JenkinsAPI(config_document['jenkins_url'],
-                             config_document['jenkins_user'],
-                             config_document['jenkins_pass'])
+        jenkins = JenkinsAPI(config['jenkins_url'], config['jenkins_user'], config['jenkins_pass'])
     except Exception as exc:
         raise GenericException(500, "Jenkins connection error: %s" % str(exc))
-    params = dict()
-    params['type'] = 'ci-pipeline'
-    params['volume_name'] = project_name_no_dashes
-    params['git_volume'] = config_document['git_volume']
-    params['service_username'] = config_document['service_username']
-    params['service_password'] = config_document['service_password']
-    params['broker_url'] = config_document['web_service_url']
-    params['container_registry'] = config_document['container_registry']
-
     try:
-        jenkins.create_job(project_name, params, request.form)
+        jenkins_job_url = jenkins.create_job(job_name=pipeline['name'], params=pipeline_job, form_fields=request.form)
+        jenkins.create_job(job_name='purge_policy_enforcer', params=purge_job, form_fields=None)
     except Exception as exc:
-        raise GenericException(
-            500, "Jenkins Job Creation Error: %s" % str(exc))
+        raise GenericException(500, "Jenkins Job Creation Error: %s" % str(exc))
 
-    jenkins_url = config_document['jenkins_url'] + "job/" + project_name
-    # Record new project in database
+    # Complete gathering pipeline details
+    pipeline['pvc'] = pvc_response['name']
+    pipeline['volume'] = pipeline_job['volume_name']
+    pipeline['jenkins_url'] = jenkins_job_url
+
+    # Record new pipeline in database
+    # TODO: type=pipeline document
     try:
-        new_project_document = Project(name=project_name,
-                                       volume=project_name_no_dashes,
-                                       export_policy=vol_export_policy,
-                                       scm_url=scm_project_url,
-                                       jenkins_url=jenkins_url)
-        new_project_document.store(database)
+        new_pipeline_document = Pipeline(**pipeline)
+        new_pipeline_document.store(connect)
     except Exception as exc:
-        raise GenericException(500,
-                               "Error recording new project in the DB, \
-                               please contact your administrator",
+        raise GenericException(500, "Error recording new project in the DB, please contact your administrator",
                                "Database Exception" + str(exc))
-    # create trigger-purge jenkins job if not already done
-    jenkins_account = dict()
-    jenkins_account['url'] = config_document['jenkins_url']
-    jenkins_account['username'] = config_document['jenkins_user']
-    jenkins_account['password'] = config_document['jenkins_pass']
 
-    try:
-        helpers.create_purge_jenkins_job(
-            job='purge_policy_enforcer', account=jenkins_account)
-    except RuntimeError as exc:
-        raise GenericException(
-            500, "Jenkins Job Creation Error: 'purge_policy_enforcer' ")
-    # need not return project_volume once we start storing volume info in DB
-    return jsonify({'project_name': project_name,
-                    'project_volume': project_name_no_dashes}), 200
+    # TODO: Can we do a better in-page rendering instead of navigating to a raw JSON msg?
+    return jsonify({'project_name': pipeline['name']}), 200
 
-@backend_blueprint.route('/backend/project/delete', methods=['POST'])
-@helpers.setup_required
-def project_delete():
+
+@backend_blueprint.route('/backend/pipeline/delete', methods=['POST'])
+def pipeline_delete():
     """
-    delete project
+    Delete a pipeline.
+    This endpoint is used by the DevOps admin
+    At the end of successful execution, Kube PVC, PV, ONTAP volume associated with the PVC, and
+    Jenkins CI job associated with the pipeline are deleted.
     ---
     tags:
-      - project
+      - pipeline
     parameters:
       - in: path
-        name: project-name
+        name: pipeline-name
         required: true
-        description: Name of the project/pipeline to be deleted
+        description: Name of the pipeline to be deleted
         type: string
 
     responses:
       200:
-        description:  project deleted successfully
+        description:  Pipeline has been deleted successfully
 
     """
-    # Retrieve customer configuration document from database
+    #####
+    # 1. Validate input form parameters
+    # 2. Delete Kube PVC (Trident deletes the PV and ONTAP volume associated with the PVC)
+    # 3. Delete DB pipeline document and Jenkins CI job
+    #####
+    # 1. Validate input form parameters
+    _validate_input_form_params(request.form, ['pipeline-name'])
+
     try:
-        database = helpers.connect_db()
-        config_document = helpers.get_db_config()
-    except Exception as e:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    if not config_document:
-        raise GenericException(500,
-                               "Customer configuration document not found, please contact your administrator",
-                               "Database Exception")
-    expected_keys = ['project-name']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(
-            400, "project-name is required")
-    try:
-        helpers.delete_project(request.form['project-name'])
+        helpers.delete_pipeline(request.form['pipeline-name'])
     except Exception as exc:
-        logging.error("Unable to delete project: %s" %
-                      traceback.format_exc())
-        raise GenericException(500, "Unable to delete project %s" % request.form['project-name'])
+        logging.error("Unable to delete project: %s" % traceback.format_exc())
+        raise GenericException(500, "Unable to delete project %s :: %s" % (request.form['pipeline-name'], str(exc)))
+
     response_object = {
         'status': 'success',
-        'message': "Successfully deleted workspace: %s" % request.form['project-name']
+        'message': "Successfully deleted workspace: %s" % request.form['pipeline-name']
     }
     return jsonify(response_object), 200
 
-@backend_blueprint.route('/backend/<volume_name>/snapshots',
-                         endpoint='snapshot_list', methods=['GET'])
-@helpers.setup_required
-def snapshot_list(volume_name):
+
+@backend_blueprint.route('/backend/volumeclaim/clone', endpoint='pvc_clone_create', methods=['POST'])
+def volume_claim_clone():
     """
-    List all snapshots
+    Create Kube PVC clone
+    This method is in place of snapshotting a source volume.
+    Volume clones will be used instead of snapshots until Trident supports snapshot creation
     ---
     tags:
-      - snapshot
-    parameters:
-      - in: path
-        name: volume_name
-        required: true
-        description: parent volume name to list snapshots
-        type: string
-    responses:
-      200:
-        description: snapshot was created successfully
-
-    """
-    database = helpers.connect_db()
-    config_document = helpers.get_db_config()
-    if not config_document:
-        raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
-                               "Database Exception")
-    ontap = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                         config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
-    snapshots = ontap.get_snapshot_list(volume_name)
-    return jsonify(snapshots)
-
-
-@backend_blueprint.route('/backend/snapshot/create', endpoint='snapshot_create', methods=['POST'])
-@helpers.setup_required
-def snapshot_create():
-    """
-    Create snapshot from volume
-    ---
-    tags:
-      - snapshot
+      - volumeclaim
     parameters:
       - in: body
-        name: snapshot_name
+        name: pvc_clone_name
         required: true
-        description: name of the snapshot being created
+        description: name of the Kube PVC being created (cloned)
         type: string
       - in: body
-        name: volume_name
+        name: pvc_source_name
         required: true
-        description: name of the volume that needs to be snapshot
+        description: name of the Kube PVC that is being cloned from
         type: string
       - in: body
         name: build_status
         required: false
-        description: specifies whether this snapshot is of a successful or failed build
+        description: specifies whether this clone is of a successful or failed build
         type: string
     responses:
       200:
-        description: snapshot was created successfully
+        description: PVC Clone was created successfully
 
     """
-    database = helpers.connect_db()
+    # TODO: document jenkins_build in docstring
+    # TODO: do we need volume name?
+    _validate_input_form_params(request.form, ['pvc_clone_name', 'pvc_source_name', 'build_status',
+                                               'jenkins_build', 'volume_name'])
     config_document = helpers.get_db_config()
     if not config_document:
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
-    ontap = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                         config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
     build_status = request.form['build_status'] or 'N/A'
     if build_status not in ["passed", "failed", "N/A"]:
         raise GenericException(406,
                                "Invalid build_status type parameter: accepted values - 'passed', 'failed', 'N/A'")
-    status = ontap.create_snapshot(
-        request.form['volume_name'], request.form['snapshot_name'])
+
+    # TODO: this name should be created in KubernetesAPI, but currently will impact create_pvc_and_pod()
+    kube = KubernetesAPI()
+    pvc_clone_name = kube.get_kube_resource_name(request.form['pvc_clone_name'], 'pvc')
+    status = kube.create_pvc_clone_resource(
+        clone=pvc_clone_name, source=request.form['pvc_source_name'])
     # record snapshot in db
     db_connect = helpers.connect_db()
     if not db_connect:
         raise GenericException(500,
-                               "Database connection failure, please contact your administrator",
+                               GenericException.DB_CONNECTION_ERROR,
                                "Database Exception")
-    snapshot_doc = Snapshot(name=request.form['snapshot_name'],
+    # TODO: Replace Snapshot doc with Clone document
+    # TODO: Do we need volume or pvc_source_name?
+    snapshot_doc = Snapshot(name=request.form['pvc_clone_name'],
+                            pvc_name=pvc_clone_name,
+                            # TODO: Why do we need volume? Also, this is not the clone volume name,
+                            #  but the parent pipeline volume name which we use later for only querying.
+                            #  Reflect key-name appropriately
+                            #  If we dont need volume_name, we can replace this with parent_pipeline_pvc_name
                             volume=request.form['volume_name'],
                             jenkins_build=request.form['jenkins_build'],
-                            build_status=build_status
-                            )
+                            build_status=build_status)
     snapshot_doc.store(db_connect)
     return jsonify(status)
 
 
-@backend_blueprint.route('/backend/snapshot/delete', endpoint='snapshot_delete', methods=['DELETE'])
-@helpers.setup_required
-def snapshot_delete():
+@backend_blueprint.route('/backend/<pipeline_name>/buildclones',
+                         endpoint='build_clones_list', methods=['GET'])
+def build_clones_list(pipeline_name):
     """
-    Delete snapshot
+    List all 'build' clones belonging to a pipeline
     ---
     tags:
-      - snapshot
+      - clone
     parameters:
-      - in: body
-        name: snapshot_name
+      - in: path
+        name: pipeline_name
         required: true
-        description: name of the snapshot being created
-        type: string
-      - in: body
-        name: volume_name
-        required: true
-        description: name of the volume that needs to be snapshot
+        description: pipeline name to list clones from
         type: string
     responses:
       200:
-        description: snapshot was deleted successfully
+        description: clones listed successfully
+
     """
     database = helpers.connect_db()
     config_document = helpers.get_db_config()
     if not config_document:
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
-    ontap = OntapService(config_document['ontap_api'], config_document['ontap_apiuser'], config_document['ontap_apipass'],
-                         config_document['ontap_svm_name'], config_document['ontap_aggr_name'], config_document['ontap_data_ip'])
-    status = ontap.delete_snapshot(
-        request.form['volume_name'], request.form['snapshot_name'])
-    return jsonify(status)
-
-# @backend_blueprint.errorhandler(helpers.DatabaseException)
-# @backend_blueprint.errorhandler(helpers.MissingParameter)
+    # volume_name = helpers.get_volume_name_for_pipeline(pipeline_name)
+    build_clones = helpers.get_all_builds_for_pipeline(pipeline_name)
+    return jsonify(build_clones)
 
 
 @backend_blueprint.errorhandler(GenericException)
@@ -897,55 +687,7 @@ def generic_error_handle(error):
     return response
 
 
-@backend_blueprint.route('/backend/snapshot/purge', endpoint='snapshot_purge', methods=['POST'])
-@helpers.setup_required
-def snapshot_purge():
-    """
-    Purge snapshots
-    ---
-    tags:
-      - snapshot
-    parameters:
-      - in: body
-        name: snapshot_type
-        required: false
-        description: type of snapshots to be purged {"scm" or "ci"}
-        type: string
-    responses:
-      200:
-        description: "web_service app is tied to a singe customer instance.
-        Calling this purge API will purge both SCM and CI snapshots from this customer instance"
-    """
-    db_connect = helpers.connect_db()
-    customer_config = helpers.get_db_config()
-    if not db_connect or not customer_config:
-        raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
-                               "Database Exception")
-
-    if 'type' in request.form:
-        snapshot_type = request.form['type']
-        count = snapshot.purge(snapshot_type)
-        if snapshot_type not in ["scm", "ci"]:  # invalid type
-            raise GenericException(406,
-                                   "Invalid snapshot type parameter: accepted values - 'scm', 'ci'")
-        msg = "Purged %s %s snapshots" % (count, snapshot_type)
-    else:
-        count_scm = snapshot.purge("scm")
-        count_ci = snapshot.purge("ci")
-        msg = "Purged %s SCM and %s CI snapshots" % (count_scm, count_ci)
-
-    response = {'code': 200,
-                'resource': 'purge',
-                'customer_instance': app.config['DATABASE_NAME'],
-                'message': msg,
-                'status': 'COMPLETED'}
-
-    return jsonify(response)
-
-
 @backend_blueprint.route('/backend/user/create', methods=['POST'])
-@helpers.setup_required
 def user_create():
     """
     create user
@@ -987,43 +729,38 @@ def user_create():
     try:
         config_document = helpers.get_db_config()
     except Exception as e:
-        config_document = None
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONNECTION_ERROR,
                                "Database Exception")
     if not config_document:
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
 
-    expected_keys = ['username', 'uid', 'gid', 'email']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(400, "username,uid,gid, and email are required")
+    _validate_input_form_params(request.form, ['username', 'uid', 'gid', 'email'])
 
-    username = request.form['username']
-    uid = request.form['uid']
-    gid = request.form['gid']
-    email = request.form['email']
     # Check if user already exists
-    current_user = helpers.get_db_user_document(username)
+    current_user = helpers.get_db_user_document(request.form['username'])
     if current_user:
         raise GenericException(500,
                                "Error recording new user in the DB: username already exists",
                                "Database Exception")
     # Record new user in database
     try:
-        new_user_document = User(name=username, uid=uid, gid=gid, email=email)
+        new_user_document = User(name=request.form['username'],
+                                 uid=request.form['uid'],
+                                 gid=request.form['gid'],
+                                 email=request.form['email'])
         new_user_document.store(database)
     except Exception as exc:
         raise GenericException(500,
                                "Error recording new user in the DB, \
                                please contact your administrator",
                                "Database Exception")
-    return jsonify({'username': username}), 200
+    return jsonify({'username': request.form['username']}), 200
 
 
 @backend_blueprint.route('/backend/user/delete', methods=['POST'])
-@helpers.setup_required
 def user_delete():
     """
     delete user
@@ -1046,16 +783,13 @@ def user_delete():
     config_document = helpers.get_db_config()
     if not config_document:
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
 
-    expected_keys = ['username']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(400, "username is required")
+    _validate_input_form_params(request.form, ['username'])
 
-    username = request.form['username']
     # Check if user exists
-    current_user = helpers.get_db_user_document(username)
+    current_user = helpers.get_db_user_document(request.form['username'])
     if not current_user:
         raise GenericException(500,
                                "Error deleting user from the DB: user does not exist",
@@ -1068,12 +802,11 @@ def user_delete():
                                "Error deleting user from the DB, \
                                please contact your administrator",
                                "Database Exception")
-    return jsonify({'message': "user %s deleted successfully " % username}), 200
+    return jsonify({'message': "user %s deleted successfully " % request.form['username']}), 200
 
 
 @backend_blueprint.route(
     '/backend/admin/ssl/modify', methods=['POST'])
-@helpers.setup_required
 def storage_service_level_modify():
     """
     Modify Storage service level of the ONTAP volume
@@ -1100,12 +833,10 @@ def storage_service_level_modify():
     config_document = helpers.get_db_config()
     if not config_document:
         raise GenericException(500,
-                               "Customer config doc not found, please contact your administrator",
+                               GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
 
-    expected_keys = ['project_name', 'ssl_name']
-    if not helpers.request_validator(request.form, expected_keys):
-        raise GenericException(400, "project_name and ssl_name are required")
+    _validate_input_form_params(request.form, ['project_name', 'ssl_name'])
 
     volume_name = helpers.replace_ontap_invalid_char(
         request.form['project_name'])

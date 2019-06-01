@@ -12,6 +12,11 @@
           <defaultValue>{{BUILDVOL}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
+          <name>BUILDVOLCLAIM</name>
+          <description>The Kubernetes PVC associated with this pipeline</description>
+          <defaultValue>{{BUILDVOLCLAIM}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
           <name>SOURCE_CODE_URL</name>
           <description></description>
           <defaultValue>{{SOURCE_CODE_URL}}</defaultValue>
@@ -27,14 +32,19 @@
           <defaultValue>{{CONTAINER_REGISTRY}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>GIT_VOLUME</name>
+          <name>SCM_VOLUME</name>
           <description></description>
-          <defaultValue>{{GIT_VOLUME}}</defaultValue>
+          <defaultValue>{{SCM_VOLUME}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>BROKER_URL</name>
-          <description>Service broker url</description>
-          <defaultValue>{{BROKER_URL}}</defaultValue>
+          <name>SCM_VOLUME_CLAIM</name>
+          <description></description>
+          <defaultValue>{{SCM_VOLUME_CLAIM}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>WEB_SERVICE_URL</name>
+          <description>Web Service URL</description>
+          <defaultValue>{{WEB_SERVICE_URL}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>JENKINS_SLAVE_IMAGE</name>
@@ -57,7 +67,7 @@
       </triggers>
     </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.53">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="pipelines@2.53">
     <script>
       // Helper Functions
 
@@ -84,10 +94,10 @@
       def buildDir = gitDir
       def sourceCodeURL = params.SOURCE_CODE_URL
       def sourceCodeBranch = params.SOURCE_CODE_BRANCH
-      def gitVolume = params.GIT_VOLUME
-      def broker_url = params.BROKER_URL
-      def scmSnapshotName = &quot;&quot;
-      def ciSnapshotName = &quot;&quot;
+      def gitVolume = params.SCM_VOLUME
+      def web_service_url = params.WEB_SERVICE_URL
+      def scmCloneName = &quot;&quot;
+      def ciCloneName = &quot;&quot;
       def currentGitRevision = &quot;&quot;
       def build_status = &quot;passed&quot;
 
@@ -112,15 +122,15 @@
       {
         node(&apos;master&apos;)
         {
-              stage(&apos;Create SCM snapshot&apos;)
+              stage(&apos;Create SCM Clone using Trident&apos;)
               {
                 def scmTrigger = currentBuild.rawBuild.getAction(hudson.plugins.git.RevisionParameterAction)
                 if (scmTrigger) {
                   currentGitRevision = scmTrigger.commit
                   gitRevShorthand = currentGitRevision.take(7)
-                  scmSnapshotName = gitRevShorthand + &apos;_&apos; + generateTimeStamp()
-                  sh &quot;curl -X POST ${broker_url}/backend/snapshot/create -F volume_name=${params.GIT_VOLUME} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${scmSnapshotName}&apos; -F &apos;type=scm&apos; &quot;
-                  echo &quot;SCM snapshot created: ${scmSnapshotName}&quot;
+                  scmCloneName = gitRevShorthand + &apos;_&apos; + generateTimeStamp()
+                  sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.SCMVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.SCM_VOLUME} -F &apos;pvc_clone_name=${scmCloneName}&apos; -F &apos;type=scm&apos;&quot;
+                  echo &quot;CI PVC Clone created: ${scmCloneName}&quot;
                 }
                 else {
                   echo &quot;Build not triggered by scm hook , skipping SCM snapshot creation&quot;
@@ -181,14 +191,15 @@
 
       // Create Snapshot and add to Snapshot List
       // This should all be done on master
+      // For getting started with Trident, we replace this step with creating a PVC Clone from the source Kube PVC
 
           node(&apos;master&apos;) {
 
-              stage(&apos;Create CI Snapshot&apos;) {
+              stage(&apos;Create CI Clone using Trident&apos;) {
                 gitRevShorthand = currentGitRevision.take(7)
-                ciSnapshotName = gitRevShorthand + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
-                sh &quot;curl -X POST ${broker_url}/backend/snapshot/create -F volume_name=${params.BUILDVOL} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${ciSnapshotName}&apos; -F &apos;build_status=${build_status}&apos; -F &apos;type=ci&apos;&quot;
-                echo &quot;CI snapshot created: ${ciSnapshotName}&quot;
+                ciCloneName = gitRevShorthand + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
+                sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.BUILDVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.BUILDVOL} -F &apos;pvc_clone_name=${ciCloneName}&apos; -F &apos;build_status=${build_status}&apos; -F &apos;type=ci&apos;&quot;
+                echo &quot;CI PVC Clone created: ${ciCloneName}&quot;
               }
               stage(&apos;Determine overall build status&apos;) {
                 if (build_status == &apos;failed&apos;) {

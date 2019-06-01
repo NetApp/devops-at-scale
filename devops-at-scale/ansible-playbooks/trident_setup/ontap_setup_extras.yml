@@ -1,0 +1,31 @@
+-
+  name: ONTAP vserver peer
+  hosts: localhost
+  tasks:
+  - name: Set route to data LIF
+    na_ontap_net_routes:
+      vserver: trident_svm
+      destination: "0.0.0.0/0"
+      gateway: "1.1.7.1"
+      metric: "20"
+      hostname: "{{ netapp_hostname }}"
+      username: "{{ netapp_username }}"
+      password: "{{ netapp_password }}"
+      state: present
+      https: true
+      validate_certs: false
+  - name: Modify ExportPolicyRule
+    na_ontap_export_policy_rule:
+      vserver: trident_svm
+      state: present
+      policy_name: default
+      rule_index: 1
+      client_match: 0.0.0.0/0
+      ro_rule: any
+      rw_rule: any
+      super_user_security: none
+      protocol: any
+      allow_suid: false
+      hostname: "{{ netapp_hostname }}"
+      username: "{{ netapp_username }}"
+      password: "{{ netapp_password }}"

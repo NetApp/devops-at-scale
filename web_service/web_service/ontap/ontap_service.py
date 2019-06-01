@@ -1,20 +1,18 @@
-'''
+"""
 Ontap Service to act as interfact between Service server and Ontap API,
 located at prohibition_service/ontap_apis/ontap_apis.py.
-'''
+"""
 import logging
-import os
 from datetime import datetime
-import yaml
 from web_service.ontap.ontap_apis.ontap_apis import Aggregate, APIServer, Volume
 
 # BASEDIR = os.path.dirname(os.path.realpath(__file__))
 # sys.path.insert(0, os.path.dirname(BASEDIR))
 # del BASEDIR
-#pylint: disable=wrong-import-position
+
 
 class OntapService(object):
-    '''ontap service class'''
+    """ontap service class"""
     def __init__(self, api, apiuser, apipass, svm_name, aggr_name, data_ip):
         self.api = api
         self.apiuser = apiuser
@@ -23,13 +21,13 @@ class OntapService(object):
         self.aggr_name = aggr_name
         self.data_ip = data_ip
         self.api_server = APIServer(api, apiuser, apipass)
-        self.aggregate = Aggregate(svm_name,aggr_name, self.api_server)
+        self.aggregate = Aggregate(svm_name, aggr_name, self.api_server)
 
     def attach_cluster(self, ip_address, ontap_username, ontap_password):
         return self.api_server.attach_cluster(ip_address, ontap_username, ontap_password)
 
     def create_volume(self, vol_name, vol_size, uid, gid, export_policy='default'):
-        '''Create ONTAP volume'''
+        """Create ONTAP volume"""
         volume = Volume(vol_name, self.aggregate)
 
         status, error_message = volume.make_volume(vol_size, uid, gid, export_policy)
@@ -52,7 +50,7 @@ class OntapService(object):
         return [vol_status], vol_size
 
     def create_clone(self, vol_name, uid, gid, clone_name, snapshot_name=None):
-        '''Create clone of snapshot for a developer workspace'''
+        """Create clone of snapshot for a developer workspace"""
         volume = Volume(vol_name, self.aggregate)
         vol_size = ""
 
@@ -89,7 +87,7 @@ class OntapService(object):
             return [clone_status], vol_size
 
     def create_snapshot(self, vol_name, snapshot_name):
-        '''Create snapshot for a volume'''
+        """Create snapshot for a volume"""
         volume = Volume(vol_name, self.aggregate)
         status, error_message, _ = volume.make_snapshot(snapshot_name)
         if status != "COMPLETED":
@@ -104,7 +102,7 @@ class OntapService(object):
         return [snap_status]
 
     def get_size_used(self, volume_name):
-        '''Retrieve storage usage for Admin Dashboard'''
+        """Retrieve storage usage for Admin Dashboard"""
         volume = Volume(volume_name, self.aggregate)
         # convert bytes to MB
         try:
@@ -122,7 +120,7 @@ class OntapService(object):
         return storage
 
     # def get_total_storage(self, volumes):
-    #     '''Return total storage usage for Admin Dashboard'''
+    #     """Return total storage usage for Admin Dashboard"""
     #     total = 0
     #     for vol in volumes:
     #         try:
@@ -142,7 +140,7 @@ class OntapService(object):
     #     return storage_total
 
     def get_snapdiff_and_delete(self, volume_name, count):
-        ''' delete workspace if greater than count days old with no changes'''
+        """ delete workspace if greater than count days old with no changes"""
         volume = Volume(volume_name, self.aggregate)
         recent_snapshot, old_snapshot, error = self.get_oldest_and_latest_snapshots(
             volume_name, count)
@@ -162,10 +160,10 @@ class OntapService(object):
         return False, "Workspace %s is active" % volume_name
 
     def get_oldest_and_latest_snapshots(self, volume_name, days):
-        '''
+        """
             Retrieve snapshot that is #days old and the most recent snapshot
             Returns: most_recent_snapshot, N_days_old_snapshot, Error(if any)
-        '''
+        """
         snapshots = self.get_snapshot_list(volume_name)
         if snapshots is None:
             logging.info("get_snapshot_list returned 0 for volume %s", volume_name)
@@ -187,7 +185,7 @@ class OntapService(object):
         return most_recent_snapshot, oldest_snapshot, None
 
     def get_svm_list(self):
-        '''Retrieve list of svms for ONTAP cluster'''
+        """Retrieve list of svms for ONTAP cluster"""
         data = self.api_server.get_svms()
         if not data:
             return []
@@ -196,7 +194,7 @@ class OntapService(object):
         return svms
 
     def get_aggregate_list(self):
-        '''Retrieve list of aggregates for ONTAP cluster'''
+        """Retrieve list of aggregates for ONTAP cluster"""
         data = self.api_server.get_aggrs()
         if not data:
             return []
@@ -205,7 +203,7 @@ class OntapService(object):
         return aggregates
 
     def get_svm_aggregate_relationships(self):
-        '''Retrieve list of svm/aggregate relationships for ONTAP cluster'''
+        """Retrieve list of svm/aggregate relationships for ONTAP cluster"""
         data = self.api_server.get_svm_aggregate_relationships()
         if not data:
             return []
@@ -214,8 +212,8 @@ class OntapService(object):
         return aggregates
 
     def get_aggregate_summary_list(self):
-        ''' build list of (aggregate_name, svm_name)
-            svm_name can be None if the aggregate is not associated with SVM '''
+        """ build list of (aggregate_name, svm_name)
+            svm_name can be None if the aggregate is not associated with SVM """
         aggregates = self.get_aggregate_list()
         svms = self.get_svm_list()
         relationships = self.get_svm_aggregate_relationships()
@@ -241,7 +239,7 @@ class OntapService(object):
         return aggregates_list
 
     def get_volume_list(self):
-        '''Retrieve list of volumes for aggregate'''
+        """Retrieve list of volumes for aggregate"""
         data = self.aggregate.get_volumes()
         if not data:
             return []
@@ -250,7 +248,7 @@ class OntapService(object):
         return volumes
 
     def get_clone_list(self, volume_name):
-        '''Retrieve list of clones for volume'''
+        """Retrieve list of clones for volume"""
         volume = Volume(volume_name, self.aggregate)
         data = volume.get_clones()
         if not data:
@@ -260,7 +258,7 @@ class OntapService(object):
         return clones
 
     def get_snapshot_list(self, volume_name):
-        '''Retrieve list of snapshots for volume'''
+        """Retrieve list of snapshots for volume"""
         volume = Volume(volume_name, self.aggregate)
         data, error_message = volume.get_snapshots()
         if error_message:
@@ -273,14 +271,14 @@ class OntapService(object):
         return [{"snapshot_name": x['name'], "timestamp": x['access_timestamp']} for x in snaps]
 
     def delete_snapshot(self, volume_name, snapshot_name):
-        '''Delete a snapshot, will fail if a clone is in use'''
+        """Delete a snapshot, will fail if a clone is in use"""
         volume = Volume(volume_name, self.aggregate)
         status, error_message = volume.delete_snapshot(snapshot_name)
         if status == "COMPLETED":
             snap_status = self.set_status(201, "Snapshot", snapshot_name)
         else:
             if "has not expired or is locked" in error_message:
-                logging.warn(
+                logging.warning(
                     "Failed to delete snapshot %s. Most likely clone is in use. error: %s",
                     snapshot_name, error_message
                 )
@@ -293,7 +291,7 @@ class OntapService(object):
         return [snap_status]
 
     def delete_volume(self, volume_name):
-        '''Delete a volume'''
+        """Delete a volume"""
         volume = Volume(volume_name, self.aggregate)
         snapshots = self.get_snapshot_list(volume_name)
 
@@ -301,7 +299,7 @@ class OntapService(object):
             logging.error("get_snapshot_list for %s returned 0", volume_name)
         else:
             for snapshot in snapshots:
-                #snapshot has snapshot_name and timestamp
+                # snapshot has snapshot_name and timestamp
                 self.delete_snapshot(volume_name, snapshot['snapshot_name'])
 
         status, error, _ = volume.unmount_offline_delete_volume()
@@ -313,12 +311,12 @@ class OntapService(object):
         return [vol_status]
 
     def get_config_parameter(self, parameter):
-        ''' Return value of specified config parameter '''
-        return self.ontap_config[parameter] or ""
+        """ Return value of specified config parameter """
+        return self.__getattribute__(parameter) or ""
 
     @staticmethod
     def set_status(code, resource_type, resource_name, error=""):
-        '''Create dictionary of resource status to return to server'''
+        """Create dictionary of resource status to return to server"""
         status = dict()
         status['resource'] = resource_type
         status['resource_name'] = resource_name
@@ -336,8 +334,7 @@ class OntapService(object):
 
         return status
 
-
     def modify_volume_ssl(self, volume_name, ssl_name):
-        '''Modify the storage service level for volume'''
+        """Modify the storage service level for volume"""
         volume = Volume(volume_name, self.aggregate)
         volume.modify_ssl(ssl_name)

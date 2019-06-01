@@ -5,19 +5,24 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 import logging
-from web_service.ontap.ontap_service import OntapService
-import web_service.tests.mocks as mocks
+import pytest
+# from web_service.ontap.ontap_service import OntapService
+# import web_service.tests.mocks as mocks
 
 # Set project root directory so coverage.py can generate coverage
 BASE_DIR = os.path.join(os.path.dirname(__file__), '../..')
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+pytestmark = pytest.mark.skip("skipping as ONTAP APIs are not used directly thanks to Trident")
+
+
 class TestONTAPService(unittest.TestCase):
     ''' Test ONTAP Service '''
     def setUp(self):
-        api_credentials = {'api_server': 'ip-address.com', 'username': 'user', 'password': 'password'}
-        self.ontap = OntapService(api_credentials, 'vserver-test', 'aggregate-test')
+        api = {'api_server': 'ip-address.com', 'username': 'user', 'password': 'password'}
+        self.ontap = OntapService(api['api_server'], api['username'], api['password'],
+                                  'vserver-test', 'aggregate-test', '1.2.3.4')
 
     @patch('web_service.ontap.ontap_service.Volume.delete_snapshot')
     def test_delete_snapshot(self, mock_delete_snapshot):
@@ -134,5 +139,6 @@ class TestONTAPService(unittest.TestCase):
         self.assertIsNone(old)
         self.assertIsNone(recent)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     unittest.main()

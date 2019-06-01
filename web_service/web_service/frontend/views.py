@@ -12,14 +12,19 @@ frontend_blueprint = Blueprint(
 app = Flask(__name__)
 
 
+@frontend_blueprint.before_app_first_request
+def setup():
+    print("Before First request, calling one time couchDB setup")
+    helpers.onetime_setup_required()
+
+
 @frontend_blueprint.route('/', methods=['GET'])
 @frontend_blueprint.route('/frontend/', methods=['GET'])
-@helpers.setup_required
 def index():
     return render_template('index.html')
 
+
 @frontend_blueprint.route('/frontend/dashboard', methods=['GET'])
-@helpers.setup_required
 def dashboard():
     try:
         services = helpers.get_services()
@@ -35,8 +40,7 @@ def dashboard():
     return render_template('dashboard.html', services=services, pipelines=pipelines, workspaces=workspaces)
 
 
-@frontend_blueprint.route('/frontend/project/create', methods=['GET'])
-@helpers.setup_required
+@frontend_blueprint.route('/frontend/pipeline/create', methods=['GET'])
 def create_project():
     try:
         config_document = helpers.get_db_config()
@@ -63,7 +67,6 @@ def get_projects():
 
 
 @frontend_blueprint.route('/frontend/workspace/git-repositories/<project_key>', methods=['GET'])
-@helpers.setup_required
 def get_repos(project_key):
     try:
         repos = helpers.get_git_repos(project_key)
@@ -75,7 +78,6 @@ def get_repos(project_key):
 
 
 @frontend_blueprint.route('/frontend/workspace/git-branches/<project_key>/<repo_name>', methods=['GET'])
-@helpers.setup_required
 def get_branches(project_key, repo_name):
     try:
         branches = helpers.get_git_branches(project_key, repo_name)
@@ -87,19 +89,16 @@ def get_branches(project_key, repo_name):
 
 
 @frontend_blueprint.route('/frontend/workspace/create', methods=['GET'])
-@helpers.setup_required
 def create_workspace():
     return render_template('workspace.html')
 
 
 @frontend_blueprint.route('/frontend/workspace/merge', methods=['GET'])
-@helpers.setup_required
 def create_merge_workspace():
     return render_template('workspace_merge.html')
 
 
 @frontend_blueprint.route('/frontend/workspace/pipelines', methods=['GET'])
-@helpers.setup_required
 def pipelines():
     try:
         pipelines = helpers.get_pipelines()

@@ -1,0 +1,3 @@
+[all]
+<hostname_master> kubernetes_role="master"
+<hostname_worker> kubernetes_role="node"

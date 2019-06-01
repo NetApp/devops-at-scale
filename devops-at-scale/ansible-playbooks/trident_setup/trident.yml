@@ -1,0 +1,84 @@
+---
+- hosts: master
+  gather_facts: false
+  vars:
+    ontap_mgmt_ip_address: "{{ netapp_hostname }}"
+    ontap_data_ip_address: "{{ netapp_data_ip }}"
+    ontap_svm: "{{ netapp_svm }}"
+    ontap_backendName: "ontap_{{ ontap_svm }}"
+    ontap_username: "{{ netapp_username }}"
+    ontap_password: "{{ netapp_password }}"
+    work_dirpath: /root/trident
+    download_url: https://github.com/NetApp/trident/releases/download
+    trident_version: 19.01.0
+    trident_installer_archive: "trident-installer-{{ trident_version }}.tar.gz"
+    trident_installer_dirpath: "{{ work_dirpath }}/trident-installer"
+    trident_backend_file: "{{ trident_installer_dirpath }}/setup/backend.json"
+    backend_base: backend-ontap-nas.json
+
+  tasks:
+  - name: create directory
+    file:
+      name: "{{ work_dirpath }}"
+      state: directory
+
+  - name: download trident installer
+    get_url:
+      url: "{{ download_url }}/v{{ trident_version }}/{{ trident_installer_archive }}"
+      dest: "{{ work_dirpath }}"
+
+  - name: untar trident installer
+    unarchive:
+      src: "{{ work_dirpath }}/{{ trident_installer_archive }}"
+      dest: "{{ work_dirpath }}"
+      remote_src: yes
+
+  - name: create trident backend file for trident etcd database
+    copy:
+      src: "{{ trident_installer_dirpath }}/sample-input/{{ backend_base }}"
+      dest: "{{ trident_backend_file }}"
+      remote_src: yes
+      force: no
+
+  - name: set ONTAP management IP address
+    lineinfile:
+      line: '\1: "{{ ontap_mgmt_ip_address }}"\2'
+      regexp: '(.*"managementLIF"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+
+  - name: set ONTAP data IP address
+    lineinfile:
+      line: '\1: "{{ ontap_data_ip_address }}"\2'
+      regexp: '(.*"dataLIF"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+
+  - name: set ONTAP svm
+    lineinfile:
+      line: '\1: "{{ ontap_svm }}"\2'
+      regexp: '(.*"svm"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+
+  - name: set ONTAP backendName
+    lineinfile:
+      line: '\1: "{{ ontap_backendName }}"\2'
+      regexp: '(.*"backendName"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+
+  - name: set ONTAP username
+    lineinfile:
+      line: '\1: "{{ ontap_username }}"\2'
+      regexp: '(.*"username"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+
+  - name: set ONTAP password
+    lineinfile:
+      line: '\1: "{{ ontap_password }}"\2'
+      regexp: '(.*"password"): ".*"(.*)'
+      path: "{{ trident_backend_file }}"
+      backrefs: yes
+

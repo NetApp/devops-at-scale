@@ -19,8 +19,8 @@ $(document).ready(function() {
     });
   var projectSelect = document.getElementById('git-projects-select')
   var buildSelect = document.getElementById('builds-select')
-  var volumeSelect = document.getElementById('volume-name')
-  var projectName = document.getElementById('project-name')
+//  var volumeSelect = document.getElementById('volume-name')
+  var pipelineName = document.getElementById('pipeline-name')
   var submitButton = document.getElementById('submit-button')
 
   function formatWorkspaceForm(data) {
@@ -35,26 +35,27 @@ $(document).ready(function() {
 
   projectSelect.onchange = function() {
     document.getElementById('builds-select')
-    var volumeName = projectSelect.value.replace(/-|\./g, "_")
-    volumeSelect.value = volumeName
-    projectName.value = projectSelect.value
-    var url = "/backend/" + volumeName + "/snapshots"
+//    var volumeName = projectSelect.value.replace(/-|\./g, "_")
+//    volumeSelect.value = volumeName
+    pipelineName.value = projectSelect.value
+    // pipelineName = pipelineName
+    var url = "/backend/" + pipelineName.value + "/buildclones"
     $.ajax({
       url: url,
       success: function(data) {
 
         $.each(data, function(index, build) {
-          var snapshot_name = build.snapshot_name
+          var clone_name = build
           var option = document.createElement("option");
-          option.innerHTML = snapshot_name;
-          option.value = snapshot_name;
+          option.innerHTML = clone_name;
+          option.value = clone_name;
           buildSelect.appendChild(option)
         });
       }
     });
   }
   buildSelect.onchange = function() {
-    var buildName = document.getElementById('build-name')
+    var buildName = document.getElementById('build-name-with-status')
     buildName.value = buildSelect.value
   }
 

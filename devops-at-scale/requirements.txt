@@ -1,0 +1,16 @@
+dependencies:
+- name: devops-at-scale-bitbucket
+  version: "1.0"
+  repository: "file://./charts/devops-at-scale-bitbucket"
+- name: devops-at-scale-gitlab
+  version: "1.0"
+  repository: "file://./charts/devops-at-scale-gitlab"
+- name: devops-at-scale-couchdb
+  version: "1.0"
+  repository: "file://./charts/devops-at-scale-couchdb"
+- name: devops-at-scale-webservice
+  version: "1.0"
+  repository: "file://./charts/devops-at-scale-webservice"
+- name: devops-at-scale-docker-registry
+  version: "1.0"
+  repository: "file://./charts/devops-at-scale-docker-registry"

@@ -29,7 +29,7 @@
       <td><a href="{{pipeline['scm_url']}}">{{pipeline['scm_url']}}</a></td>
       <td><a href="{{pipeline['jenkins_url']}}">{{pipeline['jenkins_url']}}</a></td>
       <td>{{pipeline['last_build']}}</td>
-      <td><button onclick="deleteProject(this)" value="{{pipeline['pipeline_name']}}" type="button" class="btn btn-danger">Delete</button></td>
+      <td><button onclick="deletePipeline(this)" value="{{pipeline['pipeline_name']}}" type="button" class="btn btn-danger">Delete</button></td>
     </tr>
     {% endfor %}
   </table>
@@ -41,7 +41,7 @@
       <tr>
         <th>Name</th>
         <th>Username</th>
-        <th>Project</th>
+        <th>Pipeline</th>
         <th>Action</th>
       </tr>
     </thead>
@@ -50,7 +50,7 @@
       <tr>
         <td>{{workspace['name']}}</td>
         <td>{{workspace['username']}}</td>
-        <td>{{workspace['project']}}</td>
+        <td>{{workspace['pipeline']}}</td>
         <td><button onclick="deleteWorkspace(this)" value="{{workspace['name']}}" type="button" class="btn btn-danger">Delete</button></td>
       </tr>
       {% endfor %}

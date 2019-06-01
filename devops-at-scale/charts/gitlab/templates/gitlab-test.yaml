@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Release.Name }}-gitlab-tests-{{ randAlphaNum 5 | lower }}"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+  - name: {{ .Release.Name }}-gitlab-test
+    image: {{ .Values.image }}
+    command: ["sh","curl --retry 48 --retry-delay 10 devops-at-scale-devops-at-scale-gitlab/"]
+  restartPolicy: Never

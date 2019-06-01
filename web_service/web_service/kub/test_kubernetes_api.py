@@ -1,9 +1,11 @@
-''' Test Kubernetes_api.py methods '''
+""" Test Kubernetes_api.py methods """
 
 import os
 import sys
 import unittest
 from unittest.mock import patch, Mock
+# fix circular dependency with web_service.kub.KubernetesAPI
+from web_service.helpers import helpers
 import web_service.kub.KubernetesAPI as ut
 from web_service.ontap.ontap_service import OntapService as ontap
 
@@ -12,13 +14,15 @@ BASE_DIR = os.path.join(os.path.dirname(__file__), '../..')
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+
 class TestKubernetesAPIMethods(unittest.TestCase):
-    ''' Test Kubernetes API '''
-    def setUp(self):
+    """ Test Kubernetes API """
+    @patch('kubernetes.config.load_kube_config')
+    def setUp(self, mock_load_config):
         self.kube_api = ut.KubernetesAPI("12345", "abcdef")
 
     def test_create_pv_config(self):
-        ''' Test helper to create config dictionary '''
+        """ Test helper to create config dictionary """
         expected_config = {
             "apiVersion": "v1",
             "kind": "PersistentVolume",
@@ -26,25 +30,25 @@ class TestKubernetesAPIMethods(unittest.TestCase):
                 "name": "api-test-vol-2-pv",
                 "labels": {
                     "netapp-use": "api-test-vol-2-vol"
-                    }
-                },
+                }
+            },
             "spec": {
                 "capacity": {
                     "storage": "100000M"
-                    },
+                },
                 "accessModes": ["ReadWriteMany"],
                 "nfs": {
                     "server": "169.47.240.183",
                     "path": "/api_test_vol_2"
-                    }
                 }
             }
+        }
 
         result_config = self.kube_api.create_pv_config("api-test-vol-2", 100000, "169.47.240.183")
         self.assertEqual(expected_config, result_config)
 
     def test_create_pvc_config(self):
-        ''' Test helper to create config dictionary '''
+        """ Test helper to create config dictionary """
         expected_config = {
             "apiVersion": "v1",
             "kind": "PersistentVolumeClaim",
@@ -52,31 +56,31 @@ class TestKubernetesAPIMethods(unittest.TestCase):
                 "name": "create-test-pvc",
                 "annotations": {
                     "volume.beta.kubernetes.io/storage-class": ""
-                    }
-                },
-            "spec":{
+                }
+            },
+            "spec": {
                 "accessModes": [
-                    "ReadWriteMany"
-                    ],
+                    "ReadWriteOnce"
+                ],
                 "resources": {
                     "requests": {
                         "storage": 100000
-                        }
-                    },
-                "selector":{
+                    }
+                },
+                "selector": {
                     "matchLabels": {
                         "netapp-use": "create-test-vol"
-                        }
                     }
                 }
             }
+        }
 
         result_config = self.kube_api.create_pvc_config("create-test", 100000)
 
         self.assertEqual(expected_config, result_config)
 
     def test_set_status(self):
-        '''Test helper to create status dictionary'''
+        """Test helper to create status dictionary"""
         expected_status = {
             'resource': 'Volume',
             'resource_name': 'test-vol',
@@ -90,7 +94,7 @@ class TestKubernetesAPIMethods(unittest.TestCase):
         self.assertEqual(expected_status, attempted_status)
 
     def test_set_status_for_failure(self):
-        '''Test helper to create status dictionary'''
+        """Test helper to create status dictionary"""
         expected_status = {
             'resource': 'Volume',
             'resource_name': 'test-vol',
@@ -108,7 +112,7 @@ class TestKubernetesAPIMethods(unittest.TestCase):
     # @patch('kubernetes.client.CoreV1Api.read_namespaced_service')
     # def test_get_service_url(
     #         self, mock_read_namespaced_service, mock_get_worker_node):
-    #     '''Test get_service_url function '''
+    #     """Test get_service_url function """
     #     mock_node = "kube-worker-node-01.devops.com"
     #     mock_get_worker_node.return_value = mock_node
     #     mock_read_namespaced_service.return_value = {
@@ -141,7 +145,3 @@ class TestKubernetesAPIMethods(unittest.TestCase):
     #     service_name = 'kubernetes'
     #     result = self.kube_api.get_service_url(service_name)
     #     self.assertEqual(result, "%s:%s" % (mock_node, "31455"))
-
-if __name__ == '__main__':
-    unittest.main()
-    unittest.TestLoader().loadTestsFromTestCase(TestKubernetesAPIMethods)

@@ -71,9 +71,9 @@
           <defaultValue>{{GIT_VOLUME}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>BROKER_URL</name>
-          <description>Service broker url</description>
-          <defaultValue>{{BROKER_URL}}</defaultValue>
+          <name>WEB_SERVICE_URL</name>
+          <description>Web Service URL</description>
+          <defaultValue>{{WEB_SERVICE_URL}}</defaultValue>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>INSTANCE_ID</name>
@@ -120,7 +120,7 @@ def sourceCodeURL = params.SOURCE_CODE_URL
 def sourceCodeBranch = params.SOURCE_CODE_BRANCH
 def sourceCodeCredentials = params.SOURCE_CODE_CREDENTIALS
 def gitVolume = params.GIT_VOLUME
-def broker_url = params.BROKER_URL
+def web_service_url = params.WEB_SERVICE_URL
 def scmSnapshotName = &quot;&quot;
 def ciSnapshotName = &quot;&quot;
 def currentGitRevision = &quot;&quot;
@@ -152,7 +152,7 @@ containers: [
             scmSnapshotName = replaceDashesAndPeriods(env.gitlabSourceRepoName) +
                               &apos;_&apos; + replaceDashesAndPeriods(env.gitlabBranch) +
                               &apos;_&apos; + env.gitlabAfter + &apos;_&apos; + generateTimeStamp()
-            sh &quot;curl -X POST ${broker_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.GIT_VOLUME} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${scmSnapshotName}&apos; -F &apos;type=scm&apos; -F instance_id=${instance_id}&quot;
+            sh &quot;curl -X POST ${web_service_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.GIT_VOLUME} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${scmSnapshotName}&apos; -F &apos;type=scm&apos; -F instance_id=${instance_id}&quot;
             echo &quot;SCM snapshot created: ${scmSnapshotName}&quot;
           }
           else {
@@ -221,7 +221,7 @@ containers: [
 
         stage(&apos;Create CI Snapshot&apos;) {
           ciSnapshotName = currentGitRevision + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
-          sh &quot;curl -X POST ${broker_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.BUILDVOL} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${ciSnapshotName}&apos; -F &apos;type=ci&apos; -F instance_id=${instance_id}&quot;
+          sh &quot;curl -X POST ${web_service_url}/service/snapshot/create --user ${SERVICE_USERNAME}:${SERVICE_PASSWORD} -F volume_name=${params.BUILDVOL} -F jenkins_build=${BUILD_NUMBER} -F &apos;snapshot_name=${ciSnapshotName}&apos; -F &apos;type=ci&apos; -F instance_id=${instance_id}&quot;
           echo &quot;CI snapshot created: ${ciSnapshotName}&quot;
         }
         stage(&apos;copy kube config&apos;){

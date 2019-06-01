@@ -7,10 +7,10 @@ function deleteWorkspace(me) {
       window.location.replace("/frontend/dashboard");
     });
 }
-function deleteProject(me) {
-  var project = $(me).val();
-  $.post("/backend/project/delete", {
-      "project-name": project
+function deletePipeline(me) {
+  var pipeline = $(me).val();
+  $.post("/backend/pipeline/delete", {
+      "pipeline-name": pipeline
     },
     function(data) {
       window.location.replace("/frontend/dashboard");
