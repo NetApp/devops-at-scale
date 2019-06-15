@@ -1,7 +1,8 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: {{ .Chart.Name }}
+  name: {{.Release.Name}}-webservice
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
 spec:

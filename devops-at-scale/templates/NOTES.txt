@@ -1,4 +1,4 @@
-Thanks for using Build@Scale!
+Thanks for using DevOps@Scale!
 
 Please wait for all pods/services to reach the 'ready' state prior to using
 
@@ -9,13 +9,13 @@ Once all pods are ready , please follow the steps below to get started.
 
 If using the NodePort(default) service type:
 
-	export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
-	export SERVICE_PORT=$(kubectl get -o jsonpath="{.spec.ports[0].nodePort}" services {{.Release.Name}}-webservice)
+	export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}" -n {{.Values.global.NameSpace}})
+	export SERVICE_PORT=$(kubectl get -o jsonpath="{.spec.ports[0].nodePort}" -n {{.Values.global.NameSpace}} services {{.Release.Name}}-webservice)
 	export SERVICE_URL=$NODE_IP:$SERVICE_PORT
 
-	Then visit the $SERVICE_URL using your web browser to begin using Build@Scale
+	Then visit the $SERVICE_URL using your web browser to begin using DevOps@Scale
 
-If using the LoadBalancer service type , set $SERVICE_URL to the EXTERNAl_IP of 'devops-at-scale-webservice'
+If using the LoadBalancer service type , set $SERVICE_URL to the EXTERNAl_IP of '{{.Release.Name}}-webservice'
 
 
 2) Then visit the $SERVICE_URL using your web browser to begin using DevOps@Scale

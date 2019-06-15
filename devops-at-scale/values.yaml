@@ -1,19 +1,16 @@
 global:
   # "LoadBalancer" or "NodePort"
   ServiceType: NodePort
+  # Kubernetes Namespace
+  NameSpace: default 
   scm:
     # "gitlab" or "bitbucket"
     type: "gitlab"
   registry:
     # "artifactory" or "docker-registry"
     type: "artifactory"
+  version: 1.2
   persistence:
     ontap:
-      # If set to "true", ontap volumes for various services(E.g. gitlab/aritifactory/couchdb) will be automatically created
-      automaticVolumeCreation: false
       # ontap data lif IP address
       dataIP: ""
-      # ontap SVM/Vserver
-      svm: ""
-      # ontap aggregate
-      aggregate: ""

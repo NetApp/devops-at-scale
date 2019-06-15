@@ -1,9 +1,10 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
-  name: {{ .Chart.Name }}
+  name: {{.Release.Name}}-webservice
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -14,20 +15,50 @@ spec:
       labels:
         app: {{ .Chart.Name }}
     spec:
-      serviceAccountName: {{ .Chart.Name }}
+      serviceAccountName: {{.Release.Name}}-webservice
       imagePullSecrets:
         - name: buildatscaleregcred
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{.Release.Name}}-webservice
           image: {{ .Values.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
+          # SCM specs
           - name: SCM_TYPE
             value: "{{ .Values.global.scm.type }}"
+          - name: SCM_SERVICE_NAME
+            value: "{{ .Release.Name }}-{{ .Values.global.scm.type }}"
+          - name: SCM_PVC_NAME
+            value: "{{ .Release.Name }}-{{ .Values.global.scm.type }}-pvc"
+          # Jenkins specs
+          - name: JENKINS_SERVICE_NAME
+            value: "{{ .Release.Name }}-jenkins"
+          - name: JENKINS_PVC_NAME
+            value: "{{ .Release.Name }}-jenkins-pvc"
+          # CouchDB specs
+          - name: DATABASE_SERVICE_NAME
+            value: "{{ .Release.Name }}-couchdb"
+          - name: DATABASE_PVC_NAME
+            value: "{{ .Release.Name }}-couchdb-pvc"
+          # Artifactory specs
+          - name: REGISTRY_SERVICE_NAME
+            value: "{{ .Release.Name }}-{{ .Values.global.registry.type }}"
+          - name: REGISTRY_PVC_NAME
+            value: "{{ .Release.Name }}-{{ .Values.global.registry.type }}-pvc"
           - name: REGISTRY_TYPE
             value: "{{ .Values.global.registry.type }}"
+          # Webservice specs
+          - name: WEB_SERVICE_NAME
+            value: "{{ .Release.Name }}-webservice"
+          - name: WEB_PVC_NAME
+            value: "{{ .Release.Name }}-webservice-pvc"
+          # Kube specs
           - name: SERVICE_TYPE
             value: "{{ .Values.global.ServiceType }}"
+          - name: KUBE_NAMESPACE
+            value: "{{ .Values.global.NameSpace }}"
+          - name: STORAGE_CLASS
+            value: "{{ .Values.StorageClass }}"
           ports:
           - containerPort: 80
             name: http
@@ -39,13 +70,13 @@ spec:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 180
-            failureThreshold: 200
-            periodSeconds: 10
+            initialDelaySeconds: 600
+            failureThreshold: 600
+            periodSeconds: 40
           readinessProbe:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 180
-            periodSeconds: 10
-            failureThreshold: 200
+            initialDelaySeconds: 600
+            periodSeconds: 40
+            failureThreshold: 600

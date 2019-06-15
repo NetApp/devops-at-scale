@@ -2,8 +2,8 @@
 
   vars:
     kubernetes_allow_pods_on_master: True
-    kubernetes_version: '1.11.0'
-    kubernetes_version_rhel_package: '1.11.0'
+    kubernetes_version: '1.13.0'
+    kubernetes_version_rhel_package: '1.13.0'
 
   environment:
     # required for join to succeed

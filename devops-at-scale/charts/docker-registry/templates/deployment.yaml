@@ -2,7 +2,8 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Chart.Name }}
+  namespace: {{ .Values.global.NameSpace }}
+  name: {{.Release.Name}}-docker-registry
   labels:
     app: {{ .Chart.Name }}
 spec:
@@ -19,7 +20,7 @@ spec:
         release: {{ .Release.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{.Release.Name}}-docker-registry
           image: "{{ .Values.image }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command:
@@ -56,7 +57,7 @@ spec:
             - name: REGISTRY_HTTP_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Chart.Name }}-secret
+                  name: {{.Release.Name}}-docker-registry-secret
                   key: haSharedSecret
 {{- if .Values.tlsSecretName }}
             - name: REGISTRY_HTTP_TLS_CERTIFICATE
@@ -71,12 +72,12 @@ spec:
             - name: REGISTRY_STORAGE_S3_ACCESSKEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Chart.Name }}-secret
+                  name: {{.Release.Name}}-docker-registry-secret
                   key: s3AccessKey
             - name: REGISTRY_STORAGE_S3_SECRETKEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Chart.Name }}-secret
+                  name: {{.Release.Name}}-docker-registry-secret
                   key: s3SecretKey
             - name: REGISTRY_STORAGE_S3_REGION
               value: {{ required ".Values.s3.region is required" .Values.s3.region }}
@@ -101,7 +102,7 @@ spec:
             - name: data
               mountPath: /var/lib/registry/
 {{- end }}
-            - name: "{{ .Chart.Name }}-config"
+            - name: "{{.Release.Name}}-docker-registry-config"
               mountPath: "/etc/docker/registry"
 {{- if .Values.tlsSecretName }}
             - mountPath: /etc/ssl/docker
@@ -116,7 +117,7 @@ spec:
 {{- if .Values.secrets.htpasswd }}
         - name: auth
           secret:
-            secretName: {{ .Chart.Name }}-secret
+            secretName: {{.Release.Name}}-docker-registry-secret
             items:
             - key: htpasswd
               path: htpasswd
@@ -127,12 +128,12 @@ spec:
             {{- if .Values.persistence.existingClaim }}
             claimName: "{{ .Values.persistence.existingClaim}}"
             {{ else }}
-            claimName: "{{ .Chart.Name }}-pvc"
+            claimName: "{{.Release.Name}}-docker-registry-pvc"
             {{- end -}}
 {{- end }}
-        - name: {{ .Chart.Name }}-config
+        - name: {{.Release.Name}}-docker-registry-config
           configMap:
-            name: {{ .Chart.Name }}-config
+            name: {{.Release.Name}}-docker-registry-config
 {{- if .Values.tlsSecretName }}
         - name: tls-cert
           secret:

@@ -3,6 +3,7 @@ kind: NetworkPolicy
 apiVersion: {{ .Values.NetworkPolicy.ApiVersion }}
 metadata:
   name: "{{ .Release.Name }}-{{ .Values.Master.Component }}"
+  namespace: {{ .Values.global.NameSpace }}
 spec:
   podSelector:
     matchLabels:

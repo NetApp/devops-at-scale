@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: "{{ .Release.Name }}-gitlab-tests-{{ randAlphaNum 5 | lower }}"
+  namespace: {{ .Values.global.NameSpace }}
   annotations:
     "helm.sh/hook": test-success
 spec:

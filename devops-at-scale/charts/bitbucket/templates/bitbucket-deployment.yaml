@@ -2,9 +2,10 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
-  name: {{ .Chart.Name }}
+  name: {{ .Release.Name }}-bitbucket
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -16,11 +17,11 @@ spec:
         app: {{ .Chart.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Release.Name }}-bitbucket
           image: {{ .Values.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           volumeMounts:
-          - name: {{ .Chart.Name }}
+          - name: {{ .Release.Name }}-bitbucket
             mountPath: /var/atlassian/application-data/bitbucket
           ports:
           - containerPort: 7990
@@ -50,11 +51,11 @@ spec:
             successThreshold: 1
             timeoutSeconds: 3
       volumes:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Release.Name }}-bitbucket
           persistentVolumeClaim:
             {{- if .Values.persistence.existingClaim }}
             claimName: "{{ .Values.persistence.existingClaim}}"
             {{ else }}
-            claimName: "{{ .Chart.Name }}-pvc"
+            claimName: "{{ .Release.Name }}-bitbucket-pvc"
             {{- end -}}
 {{- end -}}
