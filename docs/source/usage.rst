@@ -1,4 +1,4 @@
-General Usage
+Usage
 =================================================
 
 
@@ -7,7 +7,7 @@ Pipeline Creation
 DevOps-at-Scale pipelines can be created via pipeline creation page:
   .. code:: shell
 
-    http://<<$SERVICE_URL>>:<<devops-at-scale-webservice-port>>/frontend/pipeline/create
+    http://<<$SERVICE_URL>>/frontend/pipeline/create
 
   .. figure:: images/create_pipeline.png
     :width: 100%
@@ -35,7 +35,7 @@ Integrate GitLab with Jenkins for automatic build triggers
       :width: 100%
       :alt: Pipelines dashboard
 
-2. Open GitLab from the webservice dashboard (http://<$SERVICE_URL>:<devops-at-scale-webservice-port>)
+2. Open GitLab from the webservice dashboard (http://<$SERVICE_URL>)
 
 3. Login using root/root_devopsatscale
 
@@ -83,7 +83,7 @@ Workspace Creation
 DevOps-at-Scale workspaces can be created via workspace creation page:
   .. code:: shell
 
-    http://<<$SERVICE_URL>>:<<devops-at-scale-webservice-port>>/frontend/workspace/create
+    http://<<$SERVICE_URL>>/frontend/workspace/create
 
   .. figure:: images/workspace.png
       :width: 100%
@@ -98,27 +98,23 @@ DevOps-at-Scale workspaces can be created via workspace creation page:
   Build                                      Select the build from which the workspace should be created
   =======================       =======      ================================================================================================
 
-  .. figure:: images/create_workspace2.png
-      :width: 100%
-      :alt: TheiaIDE
-
 Once a workspace is created, you will be provided instructions on how to access your workspace via Theia Browser IDE or locally via NFS:
 
-.. figure:: images/workspace_instructions.png
-    :width: 70%
-    :alt: Theia IDE
+  .. figure:: images/workspace_instructions.png
+      :width: 70%
+      :alt: successful workspace creation
 
-.. figure:: images/theia.png
-    :width: 100%
-    :alt: Theia IDE
+  .. figure:: images/theia.png
+      :width: 100%
+      :alt: Theia IDE
 
 
 Merge Workspace Creation
 --------------------------------------
-DevOps-at-Scale merge workspaces can be created via workspace creation page:
-  .. code :: shell
+DevOps-at-Scale merge workspaces can be created via workspace creation page.
+  .. code:: shell
 
-    http://<<$SERVICE_URL>>:<<devops-at-scale-webservice-port>>/frontend/workspace/merge
+    http://<<$SERVICE_URL>>/frontend/workspace/merge
 
 Users can merge their workspace with the latest build when they feel their workspace is out of date.
 
@@ -139,3 +135,12 @@ To merge workspaces, navigate to the Merge Workspace tab and fill in the followi
   Source Workspace name                      Enter name of the source workspace to merge from
   Build                                      Select the build which the workspace should be created off
   =======================       =======      ================================================================================================
+
+
+Webservice REST APIs
+--------------------------------------
+To learn more about DevOps@Scale web service REST APIs, visit http://<<$SERVICE_URL>/apidocs
+
+  .. figure:: images/apidocs.png
+      :width: 100%
+      :alt: REST API documentation
