@@ -3,7 +3,8 @@
 apiVersion: "v1"
 kind: "PersistentVolumeClaim"
 metadata:
-  name: "{{ .Chart.Name }}-pvc"
+  name: "{{ .Release.Name }}-bitbucket-pvc"
+  namespace: {{ .Values.global.NameSpace }}
   annotations:
     volume.beta.kubernetes.io/storage-class: ""
 spec:

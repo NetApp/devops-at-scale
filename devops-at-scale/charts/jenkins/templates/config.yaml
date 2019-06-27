@@ -4,6 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ template "jenkins.fullname" . }}
+  namespace: {{ .Values.global.NameSpace }}
 data:
   config.xml: |-
     <?xml version='1.0' encoding='UTF-8'?>
@@ -33,6 +34,7 @@ data:
             <org.csanchez.jenkins.plugins.kubernetes.PodTemplate>
               <inheritFrom></inheritFrom>
               <name>default</name>
+              <namespace>{{ .Values.global.NameSpace }}</namespace>
               <instanceCap>2147483647</instanceCap>
               <idleMinutes>0</idleMinutes>
               <label>{{ .Release.Name }}-{{ .Values.Agent.Component }}</label>
@@ -74,7 +76,7 @@ data:
                   <envVars>
                     <org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
                       <key>JENKINS_URL</key>
-                      <value>http://{{.Chart.Name}}:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</value>
+                      <value>http://{{.Release.Name}}-jenkins:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</value>
                     </org.csanchez.jenkins.plugins.kubernetes.ContainerEnvVar>
                   </envVars>
                 </org.csanchez.jenkins.plugins.kubernetes.ContainerTemplate>
@@ -96,9 +98,9 @@ data:
           </templates>
           <serverUrl>https://kubernetes.default</serverUrl>
           <skipTlsVerify>false</skipTlsVerify>
-          <namespace>{{ .Release.Namespace }}</namespace>
-          <jenkinsUrl>http://{{.Chart.Name}}:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</jenkinsUrl>
-          <jenkinsTunnel>{{.Chart.Name}}-agent:50000</jenkinsTunnel>
+          <namespace>{{ .Values.global.NameSpace }}</namespace>
+          <jenkinsUrl>http://{{.Release.Name}}-jenkins:{{.Values.Master.ServicePort}}{{ default "" .Values.Master.JenkinsUriPrefix }}</jenkinsUrl>
+          <jenkinsTunnel>{{.Release.Name}}-jenkins-agent:50000</jenkinsTunnel>
           <containerCap>1000</containerCap>
           <retentionTimeout>5</retentionTimeout>
           <connectTimeout>0</connectTimeout>

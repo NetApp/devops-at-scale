@@ -4,6 +4,7 @@ apiVersion: rbac.authorization.k8s.io/{{ required "A valid .Values.rbac.apiVersi
 kind: ClusterRoleBinding
 metadata:
   name: {{ $serviceName }}-role-binding
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ $serviceName }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -16,5 +17,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: {{ $serviceName }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.global.NameSpace }}
 {{ end }}

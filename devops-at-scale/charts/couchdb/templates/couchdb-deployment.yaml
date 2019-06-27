@@ -1,9 +1,10 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
-  name: {{ .Chart.Name }}
+  name: {{.Release.Name}}-couchdb
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -15,7 +16,7 @@ spec:
         app: {{ .Chart.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{.Release.Name}}-couchdb
           image: {{ .Values.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
@@ -24,7 +25,7 @@ spec:
           - name: COUCHDB_PASSWORD
             value: "{{ .Values.AdminPassword }}"
           volumeMounts:
-          - name: {{ .Chart.Name }}
+          - name: {{.Release.Name}}-couchdb
             mountPath: /opt/couchdb/data
           ports:
           - containerPort: 5984
@@ -43,10 +44,10 @@ spec:
             periodSeconds: 10
             failureThreshold: 200
       volumes:
-        - name: {{ .Chart.Name }}
+        - name: {{.Release.Name}}-couchdb
           persistentVolumeClaim:
             {{- if .Values.persistence.existingClaim }}
             claimName: "{{ .Values.persistence.existingClaim}}"
             {{ else }}
-            claimName: "{{ .Chart.Name }}-pvc"
+            claimName: "{{.Release.Name}}-couchdb-pvc"
             {{- end -}}

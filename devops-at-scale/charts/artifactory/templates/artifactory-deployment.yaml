@@ -2,9 +2,10 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
-  name: {{ .Chart.Name }}
+  name: {{ .Release.Name }}-artifactory
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -16,11 +17,11 @@ spec:
         app: {{ .Chart.Name }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Release.Name }}-artifactory
           image: {{ .Values.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           volumeMounts:
-          - name: {{ .Chart.Name }}
+          - name: {{ .Release.Name }}-artifactory
             mountPath: /var/opt/jfrog/artifactory
           ports:
           - containerPort: 8081
@@ -40,11 +41,11 @@ spec:
             periodSeconds: 10
             failureThreshold: 200
       volumes:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Release.Name }}-artifactory
           persistentVolumeClaim:
             {{- if .Values.persistence.existingClaim }}
             claimName: "{{ .Values.persistence.existingClaim}}"
             {{ else }}
-            claimName: "{{ .Chart.Name }}-pvc"
+            claimName: "{{ .Release.Name }}-artifactory-pvc"
             {{- end -}}
 {{- end -}}

@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ template "jenkins.fullname" . }}-jobs
+  namespace: {{ .Values.global.NameSpace }}
 data:
 {{ .Values.Master.Jobs | indent 2 }}
 {{- end -}}

@@ -1,7 +1,8 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{ .Chart.Name }}
+  name: {{.Release.Name}}-jenkins
+  namespace: {{ .Values.global.NameSpace }}
   labels:
     heritage: {{ .Release.Service | quote }}
     release: {{ .Release.Name | quote }}
@@ -209,7 +210,7 @@ spec:
           {{- if .Values.persistence.existingClaim }}
           claimName: "{{ .Values.persistence.existingClaim}}"
           {{ else }}
-          claimName: "{{ .Chart.Name }}-pvc"
+          claimName: "{{.Release.Name}}-jenkins-pvc"
           {{- end -}}
       {{- else }}
         emptyDir: {}
