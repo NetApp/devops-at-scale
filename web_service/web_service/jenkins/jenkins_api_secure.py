@@ -139,10 +139,9 @@ class JenkinsAPI(object):
         """ Create Jenkins job template, setup build parameters """
         template_loader = jinja2.FileSystemLoader(searchpath="./web_service/templates/")
         template_env = jinja2.Environment(loader=template_loader)
-
         if params['type'] == 'ci-pipeline':
 
-            template_file = "./ci_pipeline.xml"
+            template_file = "ci_pipeline.xml"
 
             job_template_vars = {
                 "SOURCE_CODE_BRANCH": form_fields['scm-branch'],
@@ -152,14 +151,16 @@ class JenkinsAPI(object):
                 "CONTAINER_REGISTRY": params['registry_service_name'],
                 "SCM_VOLUME": params['scm_volume'],
                 "SCM_VOLUME_CLAIM": params['scm_pvc_name'],
-                "WEB_SERVICE_URL": params['web_service_url']
+                "WEB_SERVICE_URL": params['web_service_url'],
+                "KUBE_NAMESPACE": params['kube_namespace']
             }
         elif params['type'] == 'trigger-purge':
             template_file = "./purge_policy_enforcer_job.xml"
             job_template_vars = {
                 "SERVICE_URL": params['web_service_url'],
                 "SERVICE_USERNAME": params['web_service_username'],
-                "SERVICE_PASSWORD": params['web_service_password']
+                "SERVICE_PASSWORD": params['web_service_password'],
+                "KUBE_NAMESPACE": params['kube_namespace']
             }
         else:
             raise KeyError
