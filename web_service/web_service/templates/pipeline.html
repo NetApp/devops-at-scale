@@ -5,16 +5,16 @@
 <script type="text/javascript"  src="/static/scripts/pipeline_bitbucket.js"></script>
 {% endif %}
 <div id='create-project'>
- <form class="form-horizontal" action="/backend/pipeline/create" method="post">
+ <form class="mx-auto" style="width: 95%;" action="/backend/pipeline/create" method="post">
    {% if "bitbucket" in scm_type %}
-    <div class="form-group row">
-      <div class="col-xs-3">
+    <div class="form-row align-items-center">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
     <div class="form-row">
-      <label class="col-xs-5" for="git-project">Git Project</label>
-      <div class="col-xs-5" id="git-projects">
+      <label class="col-sm-2 col-form-label" for="git-project">Git Project</label>
+      <div class="col-sm-10" id="git-projects">
         <select id="git-projects-select" >
           <option selected>Select a GIT project</option>
         </select>
@@ -22,13 +22,13 @@
     </div>
 
     <div class="form-group row">
-      <div class="col-xs-3">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
     <div class="form-row">
-      <label class="col-xs-5" for="git-repos">Git Repository</label>
-      <div class="col-xs-5" id="git-repos">
+      <label class="col-sm-2 col-form-label" for="git-repos">Git Repository</label>
+      <div class="col-sm-10" id="git-repos">
         <select id="git-repos-select">
           <option selected>Select a GIT Repository</option>
         </select>
@@ -36,13 +36,13 @@
     </div>
     {% endif %}
     <div class="form-group row">
-      <div class="col-xs-3">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
     <div class="form-row">
-      <label class="col-xs-5" for="scm-url">SCM URL</label>
-        <div class="col-xs-5">
+      <label class="col-sm-2 col-form-label" for="scm-url">SCM URL</label>
+        <div class="col-sm-10">
         {% if "bitbucket" in scm_type %}
         <input type="text" class="form-control" name="scm-url" id="scm-url" readonly>
         {% else %}
@@ -52,13 +52,13 @@
     </div>
 
     <div class="form-group row">
-      <div class="col-xs-3">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
     <div class="form-row">
-      <label class="col-xs-5" for="git-branches">SCM Branch</label>
-      <div class="col-xs-5" id="git-branches">
+      <label class="col-sm-2 col-form-label" for="git-branches">SCM Branch</label>
+      <div class="col-sm-10" id="git-branches">
         {% if "bitbucket" in scm_type %}
         <input type="hidden" class="form-control" name="scm-branch" id="scm-branch" placeholder="SCM Branch">
         <select id="git-branches-select">
@@ -71,24 +71,24 @@
     </div>
 
     <div class="form-group row">
-      <div class="col-xs-3">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
 
     <div class="form-row">
-      <label class="col-xs-5" for="export-policy">Export Policy</label>
-        <div class="col-xs-5">
+      <label class="col-sm-2 col-form-label" for="export-policy">Export Policy</label>
+        <div class="col-sm-10">
         <input type="text" class="form-control" name="export-policy" id="export-policy" placeholder="default">
       </div>
     </div>
     <div class="form-group row">
-      <div class="col-xs-3">
+      <div class="col-sm-10">
         <input type=hidden>
       </div>
     </div>
     <div class="form-row">
-      <div class="col-xs-5">
+      <div class="col-sm-10">
         <button type="submit" id="submit-button" class="btn btn-primary mb-2" data-loading-text="<i class='fa fa-spinner fa-spin '></i>Creating Pipeline...">Create Pipeline</button>
 
       </div>

@@ -25,11 +25,14 @@
     <tbody id="pipelines-body"></tbody>
     {% for pipeline in pipelines %}
     <tr>
+      <form class="mx-auto" style="width: 95%;" action="/backend/pipeline/delete" method="post">
       <td>{{pipeline['pipeline_name']}}</td>
       <td><a href="{{pipeline['scm_url']}}">{{pipeline['scm_url']}}</a></td>
       <td><a href="{{pipeline['jenkins_url']}}">{{pipeline['jenkins_url']}}</a></td>
       <td>{{pipeline['last_build']}}</td>
-      <td><button onclick="deletePipeline(this)" value="{{pipeline['pipeline_name']}}" type="button" class="btn btn-danger">Delete</button></td>
+<!--      <td><button type="submit" onclick="deletePipeline(this)" value="{{pipeline['pipeline_name']}}" class="btn btn-danger">Delete</button></td>-->
+      <td><button type="submit" id="{{pipeline['pipeline_name']}}" name="pipeline-name" value="{{pipeline['pipeline_name']}}" class="btn btn-danger">Delete</button></td>
+      </form>
     </tr>
     {% endfor %}
   </table>
