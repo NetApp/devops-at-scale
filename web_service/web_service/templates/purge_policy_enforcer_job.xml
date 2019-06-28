@@ -29,6 +29,11 @@
           <description>Service password</description>
           <defaultValue>{{SERVICE_PASSWORD}}</defaultValue>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>KUBE_NAMESPACE</name>
+          <description>Kubernetes Namespace</description>
+          <defaultValue>{{KUBE_NAMESPACE}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>

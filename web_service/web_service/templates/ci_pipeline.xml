@@ -56,6 +56,11 @@
           <description></description>
           <defaultValue>false</defaultValue>
         </hudson.model.BooleanParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>KUBE_NAMESPACE</name>
+          <description>Kubernetes Namespace</description>
+          <defaultValue>{{KUBE_NAMESPACE}}</defaultValue>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
     <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
@@ -90,6 +95,7 @@
       def volumeMountPath = &apos;/mnt/&apos; + params.BUILDVOL
       def podName =  &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
       def podLabel = &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
+      def kubeNameSpace = "${KUBE_NAMESPACE}"
       def gitDir = volumeMountPath + &apos;/git&apos;
       def buildDir = gitDir
       def sourceCodeURL = params.SOURCE_CODE_URL
@@ -106,7 +112,7 @@
 
       // Define Kubernetes Pod that we will use for this job and mount Ontap Volume on this POD
       // We need to mount /var/run/docker.sock for DIND builds (Docker in Docker)
-      podTemplate(name: podName , label: podLabel,
+      podTemplate(name: podName, label: podLabel, namespace: kubeNameSpace,
       volumes: [hostPathVolume(hostPath: &apos;/var/run/docker.sock&apos;, mountPath: &apos;/var/run/docker.sock&apos;),
                 persistentVolumeClaim(claimName: pvcName, mountPath: volumeMountPath, readOnly: false)],
       containers: [
