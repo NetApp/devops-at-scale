@@ -47,38 +47,6 @@ Installing Using Helm Package Manager
           # ontap data lif IP address
           dataIP: ""
 
-4. Customizing Kubernetes NameSpace and Storage Class
-
-  By default, the Kubernetes deployment is run in 'default' namespace.
-  This can be customized by setting the 'NameSpace' field in devops-at-scale/values.yaml
-
-  Below example deploys in 'production' namespace'
-
-  .. code-block:: shell
-
-    cat values.yaml
-    global:
-      # "LoadBalancer" or "NodePort"
-      ServiceType: NodePort
-      NameSpace: production
-
-There are 6 Kubernetes services deployed as part of this master helm chart.
-By default, all PVCs assigned to the services use the default storage class set in the Kubernetes cluster.
-This can be customized, by setting the desired storage class in the appropriate service's values.yaml
-
-Below example specifies how to use 'gold' storage class for the Artifactory service.
-The value is set in devops-at-scale/charts/artifactory/values.yaml
-
-  .. code-block:: shell
-
-    replicaCount: 1
-    image: docker.bintray.io/jfrog/artifactory-oss:latest
-    imagePullPolicy: Always
-    persistence:
-      volumeSize: "10000M"
-    # Assigns PVCs to default storage class when not specified
-    StorageClass: "gold"
-
 5. Install helm chart using following command :
 
   .. code-block:: shell
@@ -144,6 +112,95 @@ The value is set in devops-at-scale/charts/artifactory/values.yaml
   .. note:: GitLab service can be accessed using credentials 'root:root_devopsatscale' initially
   .. note:: All other services can be accessed using credentials 'admin:admin' initially
   .. note:: Default user for web-service is created with username 'admin'
+
+Customized deployment
+--------------------------------------
+
+**Customizing Kubernetes NameSpace**
+
+  By default, the Kubernetes deployment is run in 'default' namespace.
+  This can be customized by setting the 'NameSpace' field in devops-at-scale/values.yaml
+
+  Below example deploys in 'production' namespace'
+
+  .. code-block:: shell
+
+    cat values.yaml
+    global:
+      # "LoadBalancer" or "NodePort"
+      ServiceType: NodePort
+      NameSpace: production
+
+**Customizing Storage Class**
+
+There are 6 Kubernetes services deployed as part of this master helm chart.
+By default, all PVCs assigned to the services use the default storage class set in the Kubernetes cluster.
+This can be customized, by setting the desired storage class in the appropriate service's values.yaml
+
+Below example specifies how to use 'gold' storage class for the Artifactory service.
+The value is set in devops-at-scale/charts/artifactory/values.yaml
+
+  .. code-block:: shell
+
+    replicaCount: 1
+    image: docker.bintray.io/jfrog/artifactory-oss:latest
+    imagePullPolicy: Always
+    persistence:
+      volumeSize: "10000M"
+    # Assigns PVCs to default storage class when not specified
+    StorageClass: "gold"
+
+**Customizing Volume access mode from Kubernetes PVC**
+
+By default, all the 6 Kubernetes service PVCs are assigned to the 'ReadWriteOnce' access mode in the PVC spec.
+The default value 'ReadWriteOnce' supports both NFS and iSCSI volume backends, and is sufficient for most PVCs.
+However for Jenkins service, this can be customized to 'ReadWriteMany' to allow parallel Jenkins build agents (if there is a need to parallelize the build).
+
+
+Below example specifies how to use 'ReadWriteMany' access mode for Jenkins PVC
+The value is set in devops-at-scale/charts/jenkins/templates/jenkins-pvc.yaml
+
+  .. code-block:: shell
+
+    spec:
+      # use 'ReadWriteMany' if there is a need to parallelize the builds (multiple Jenkins agents running parallel)
+      accessModes:
+      - "ReadWriteMany"
+      resources:
+        requests:
+          storage: "{{ .Values.persistence.volumeSize }}"
+
+
+Customized Deployment
+--------------------------------------
+
+**Jenkins repository running behind a forward proxy**
+
+Refer to devops-at-scale/charts/jenkins/README.md for more customization options to the Jenkins deployment
+The master pod uses an Init Container to install plugins etc. If you are behind a corporate proxy it may be useful to set `Master.InitContainerEnv` to add environment variables such as `http_proxy`, so that these can be downloaded.
+
+Additionally, you may want to add env vars for the Jenkins container, and the JVM (`Master.JavaOpts`).
+
+  .. code-block:: shell
+
+    Master:
+      InitContainerEnv:
+        - name: http_proxy
+          value: "http://192.168.64.1:3128"
+        - name: https_proxy
+          value: "https://192.168.64.1:3128"
+        - name: no_proxy
+          value: ""
+      ContainerEnv:
+        - name: http_proxy
+          value: "http://192.168.64.1:3128"
+        - name: https_proxy
+          value: "https://192.168.64.1:3128"
+      JavaOpts: >-
+        -Dhttp.proxyHost=192.168.64.1
+        -Dhttp.proxyPort=3128
+        -Dhttps.proxyHost=192.168.64.1
+        -Dhttps.proxyPort=3128
 
 
 Additional Configuration
