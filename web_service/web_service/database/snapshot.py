@@ -12,6 +12,8 @@ class Snapshot(Document):
     name = TextField()
     type = TextField(default="snapshot")
     volume = TextField()
+    pvc = TextField()
+    parent_pipeline_pvc = TextField()
     project = TextField()
     jenkins_build = IntegerField()
     build_status = TextField()

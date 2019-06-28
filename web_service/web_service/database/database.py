@@ -7,10 +7,12 @@ from .user import User
 
 def connect(url, user, password, database):
     '''Connect to existing couchdb database or create it'''
+    host = url
     if url.startswith('http'):
         host = re.sub(r'https?://', '', url)
     if url.startswith('www.'):
         host = re.sub(r'www.', '', url)
+    server = "http://%s:%s@%s"
     couchdb_server = couchdb.Server("http://%s:%s@%s" % (user, password, host))
     if database in couchdb_server:
         return couchdb_server[database]
@@ -49,7 +51,7 @@ def create(host, user, password, database_name):
                                         emit(doc.uid, doc.name);
                                     }
                                 }''')
-    create_view(database, view_name='get_build_clones_with_status_by_pipeline',
+    create_view(database, view_name='get_build_clones_with_status_by_volume',
                 view_method='''function(doc) {
                                         if(doc.type == 'snapshot') {
                                             emit(doc.volume, doc.name+'_'+doc.build_status);
@@ -61,6 +63,18 @@ def create(host, user, password, database_name):
                                                 emit(doc.username, doc.name);
                                             }
                                         }''')
+    create_view(database, view_name='get_build_clones_by_pipeline',
+                view_method='''function(doc) {
+                                               if(doc.type == 'snapshot') {
+                                                   emit(doc.parent_pipeline_pvc, doc.pvc);
+                                               }
+                                           }''')
+    create_view(database, view_name='get_ws_clones_by_pipeline',
+                view_method='''function(doc) {
+                                               if(doc.type == 'workspace') {
+                                                   emit(doc.pipeline_pvc, doc.pvc);
+                                               }
+                                           }''')
     # create a configuration document with default values
     new_configuration = Configuration(name='configuration')
     new_configuration.store(database)
@@ -127,7 +141,19 @@ def get_workspaces_by_user(database, user):
     return workspaces
 
 
-def get_build_clones_with_status_by_pipeline(database, volume):
+def get_build_clones_with_status_by_volume(database, volume):
     '''Get all clone names associated with a volume
        @return: ViewResults where each row has row.key=volume and row.value=clone_name_build_status'''
-    return database.view('design_doc/get_build_clones_with_status_by_pipeline', key=volume)
+    return database.view('design_doc/get_build_clones_with_status_by_volume', key=volume)
+
+
+def get_build_clones_by_pipeline(database, pipeline_pvc):
+    '''Get all build clone PVCs associated with a pipeline
+       @return: ViewResults where each row has row.key=pvc and row.value=build_clone_pvc'''
+    return database.view('design_doc/get_build_clones_by_pipeline', key=pipeline_pvc)
+
+
+def get_ws_clones_by_pipeline(database, pipeline_pvc):
+    '''Get all workspace clone PVCs associated with a pipeline
+       @return: ViewResults where each row has row.key=pvc and row.value=ws_clone_pvc'''
+    return database.view('design_doc/get_ws_clones_by_pipeline', key=pipeline_pvc)

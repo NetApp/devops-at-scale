@@ -14,7 +14,6 @@ app = Flask(__name__)
 
 @frontend_blueprint.before_app_first_request
 def setup():
-    print("Before First request, calling one time couchDB setup")
     helpers.onetime_setup_required()
 
 
@@ -55,7 +54,6 @@ def create_project():
 
 
 @frontend_blueprint.route('/frontend/workspace/git-projects', methods=['GET'])
-@helpers.setup_required
 def get_projects():
     try:
         projects = helpers.get_git_projects()

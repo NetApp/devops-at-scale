@@ -149,9 +149,9 @@ def replace_kube_invalid_characters(text):
 
 def connect_db():
     """Connect to database and retrieve config document"""
-    logging.info("APP CONFIG:: " + str(app.config))
     if app.config.get('DATABASE_URL') is None:
-        app.config['DATABASE_URL'] = KubernetesAPI().get_service_url(service_name=app.config['DATABASE_SERVICE_NAME'])
+        app.config['DATABASE_URL'] = KubernetesAPI.get_instance().get_service_url(
+            service_name=app.config['DATABASE_SERVICE_NAME'])
         logging.info("DATABASE_URL not known, fetching from Kubernetes " + app.config['DATABASE_URL'])
     try:
         database = Database.connect(app.config['DATABASE_URL'], app.config['DATABASE_USER'],
@@ -381,7 +381,7 @@ def get_services():
         Get information about all services associated with Build@Scale
     """
     config_document = get_db_config()
-    kube = KubernetesAPI()
+    kube = KubernetesAPI.get_instance()
     services = []
     # Retrieve scm service
     scm_service_name = config_document['scm_service_name']
@@ -436,7 +436,7 @@ def delete_workspace(name):
         pvc = workspace['pvc']
         pod_name = workspace['pod']
         service = workspace['service']
-        kube = KubernetesAPI()
+        kube = KubernetesAPI.get_instance()
         kube.delete_service(service)
         logging.info("Workspace service deleted")
         kube.delete_pod(pod_name)
@@ -449,20 +449,55 @@ def delete_workspace(name):
         raise
 
 
+def get_db_name_from_kube_resource(kube_resource_name):
+    ''' All kube resource names have the resource_type as suffix to the DB name '''
+    st = '_'.join(kube_resource_name.split('-')[:-1])
+    print("Reverse lookup kube name for ", kube_resource_name, " :: ", st)
+    return st
+
+
+def check_if_workspaces_exist_for_pipeline(name):
+    get_db_config()
+    db = connect_db()
+    # retrieve details for the current pipeline
+    pipeline = Database.get_document_by_name(db, name)
+    # get all workspaces for the pipeline. If one or more workspaces exist, we don't delete the pipeline
+    workspace_list = get_all_ws_pvc_for_pipeline(pipeline['pvc'])
+    print("Got workspace list as:: ", str(workspace_list))
+    return len(workspace_list) > 0, workspace_list
+
+
 def delete_pipeline(name):
     """
     Delete all elements associated with a given pipeline(ONTAP volume/Jenkins job)
     When using Trident, it is sufficient to delete the PVC mapped to the project
     (Trident takes care of deleting the volume and PV)
+    After deleting the pipeline's PVC, delete all the build clone PVCs associated with the pipeline
+    (Don not proceed with this step, if there is at least one workspace tied to a pipeline build)
     """
     # TODO: Be more specific on what goes in 'try'
+    get_db_config()
+    db = connect_db()
+    # retrieve details for the current pipeline
+    pipeline = Database.get_document_by_name(db, name)
+    # if there aren't any workspaces, we can safely delete all the build clones
+    build_pvc_list = get_all_build_pvc_for_pipeline(pipeline['pvc'])
     try:
-        get_db_config()
-        db = connect_db()
-        pipeline = Database.get_document_by_name(db, name)
-        pvc = pipeline['pvc']
-        KubernetesAPI().delete_pvc(pvc)
+        for build_pvc in build_pvc_list:
+            # if this is a re-try (intermittent failure) PVC is already gone
+            try:
+                KubernetesAPI.get_instance().delete_pvc(build_pvc)
+            except Exception:
+                pass
+            # delete the pipeline DB doc
+            db_name = get_db_name_from_kube_resource(build_pvc)
+            build = Database.get_document_by_name(db, db_name)
+            db.delete(build)
+        # when all build clones are deleted successfully, delete the pipeline PVC
+        KubernetesAPI.get_instance().delete_pvc(pipeline['pvc'])
+        # delete the pipeline DB doc
         db.delete(pipeline)
+        # finally delete the Jenkins job
         jenkins = connect_jenkins()
         jenkins.delete_job(name)
     except Exception as e:
@@ -485,7 +520,7 @@ def get_volume_name_for_pipeline(name):
         raise
 
 
-def get_all_builds_for_pipeline(pipeline):
+def get_all_builds_with_status_for_pipeline(pipeline):
     """
     Retrieve list of build clones associated with a pipeline
     (Each build is mapped to an ONTAP clone provisioned by Trident)
@@ -497,11 +532,47 @@ def get_all_builds_for_pipeline(pipeline):
     volume = get_volume_name_for_pipeline(pipeline)
     config = get_db_config()
     db = connect_db()
-    build_clones = Database.get_build_clones_with_status_by_pipeline(db, volume)
+    build_clones = Database.get_build_clones_with_status_by_volume(db, volume)
     build_clones_list = []
     for clone in build_clones:
         build_clones_list.append(clone['value'])
     return build_clones_list
+
+
+def get_all_build_pvc_for_pipeline(pipeline_pvc):
+    """
+    Retrieve list of build PVCs (build clones) associated with a pipeline
+    (Each build is mapped to an ONTAP clone provisioned by Trident)
+
+    :param pipeline: PVC name of the pipeline
+    :return: List of clone PVCs belonging to the pipeline
+    """
+    # TODO: future: get all snapshots (instead of clones) representing the builds
+    get_db_config()
+    db = connect_db()
+    build_clones = Database.get_build_clones_by_pipeline(db, pipeline_pvc)
+    build_clones_list = []
+    for clone in build_clones:
+        build_clones_list.append(clone['value'])
+    return build_clones_list
+
+
+def get_all_ws_pvc_for_pipeline(pipeline_pvc):
+    """
+        Retrieve list of Workspace PVCs (user clones) associated with a pipeline
+        (Each build is mapped to an ONTAP clone provisioned by Trident)
+
+        :param pipeline: PVC name of the pipeline
+        :return: List of workspace PVCs belonging to the pipeline
+        """
+    # TODO: future: get all snapshots (instead of clones) representing the builds
+    get_db_config()
+    db = connect_db()
+    ws_clones = Database.get_ws_clones_by_pipeline(db, pipeline_pvc)
+    ws_clones_list = []
+    for clone in ws_clones:
+        ws_clones_list.append(clone['value'])
+    return ws_clones_list
 
 
 def onetime_setup_required():
@@ -513,25 +584,29 @@ def onetime_setup_required():
     :return:
     """
     # Configure the couchdb cluster
-    print("ONE TIME SETUP")
     _setup_couchdb()
 
 
 def _setup_couchdb():
     # Configure the couchdb cluster
-    # Configure the couchdb cluster
     headers = {'Content-type': 'application/json'}
     db_cluster_config = {"action": "enable_cluster", "bind_address": "0.0.0.0",
                          "username": "admin", "password": "admin", "node_count": "1"}
+
+    # Retrieve Kube namespace
+    kube_specs = {
+        'namespace': app.config['KUBE_NAMESPACE'],
+        'service_type': app.config['SERVICE_TYPE']
+    }
+    KubernetesAPI(kube_specs)
+    kube = KubernetesAPI.get_instance()
+
     # Retrieve customer configuration document from database
     database = connect_db()
     config_document = get_db_config()
 
-    print("GOT DEFAULT CONFIGURATION UPDATED AS:: ", str(config_document))
-
     # Empty SCM URL this is a sign that setup has not been done yet
     if config_document['scm_url'] is None:
-        print("ONE TIME SETUP:: CLUSTER COUCHDB")
         try:
             r = requests.post("%s/_cluster_setup" % app.config['DATABASE_URL'],
                               json=db_cluster_config, headers=headers)
@@ -539,51 +614,49 @@ def _setup_couchdb():
             raise GenericException(
                 500, "Error configuring the couchdb cluster : %s, please contact your administrator" % str(exc))
 
+        # TODO: Most of these values should be fetched from Kubernetes. That way, we keep configuration for the DevOps
+        #  Admin very simple with only one place to config (helm charts).
+        #  No config data flows from app.config
+        #  (even for a Dev or Test environment, we would be able to fetch all the info from Kube)
+        #  The Kubernetes namespace and service_names to be set somewhere (within Kube?) to eliminate app.config reads
         # Populate rest of the configuration details from the ENV variables (set by DevOps Admin)
-        kube = KubernetesAPI()
         # ONTAP
         config_document['ontap_svm_name'] = app.config['ONTAP_SVM_NAME']
         config_document['ontap_aggr_name'] = app.config['ONTAP_AGGR_NAME']
         config_document['ontap_data_ip'] = app.config['ONTAP_DATA_IP']
 
         # SCM
+        config_document['scm_type'] = app.config['SCM_TYPE']
         config_document['scm_service_name'] = app.config['SCM_SERVICE_NAME']
-        config_document['scm_url'] = kube.get_service_url(service_name=app.config['SCM_SERVICE_NAME'])
+        # TODO: Once we add PVC names to annotations or labels in service, we can fetch this from Kube
         config_document['scm_pvc_name'] = app.config['SCM_PVC_NAME']
+        config_document['scm_url'] = kube.get_service_url(service_name=app.config['SCM_SERVICE_NAME'])
         config_document['scm_volume'] = kube.get_volume_name_from_pvc(pvc_name=app.config['SCM_PVC_NAME'])
 
         # Jenkins
         config_document['jenkins_service_name'] = app.config['JENKINS_SERVICE_NAME']
+        config_document['jenkins_pvc_name'] = app.config['JENKINS_PVC_NAME']
         config_document['jenkins_url'] = kube.get_service_url(service_name=app.config['JENKINS_SERVICE_NAME'])
 
         # Database CouchDB
         config_document['database_service_name'] = app.config['DATABASE_SERVICE_NAME']
+        config_document['database_pvc_name'] = app.config['DATABASE_PVC_NAME']
 
         # Artifactory
         config_document['registry_service_name'] = app.config['REGISTRY_SERVICE_NAME']
+        config_document['registry_pvc_name'] = app.config['REGISTRY_PVC_NAME']
         config_document['registry_type'] = app.config['REGISTRY_TYPE']
 
         # Webservice
         config_document['web_service_name'] = app.config['WEB_SERVICE_NAME']
+        config_document['web_pvc_name'] = app.config['WEB_PVC_NAME']
         config_document['web_service_url'] = kube.get_service_url(service_name=app.config['WEB_SERVICE_NAME'])
 
+        # Kube specs
+        config_document['service_type'] = app.config['SERVICE_TYPE']
+        config_document['kube_namespace'] = app.config['KUBE_NAMESPACE']
+
+        # If Storage Class is "" , Kube does not set storage class to allow the PVC to be assigned to default SC
+        config_document['storage_class'] = app.config['STORAGE_CLASS']
+
         config_document.store(database)
-
-    print("FINAL CONFIG DOCUMENT:: ", str(config_document))
-
-
-def setup_required(f):
-    @wraps(f)
-    def setup(*args, **kwargs):
-        """
-        This method is a one time setup to populate the configuration document in CouchDB
-        If called elsewhere, to avoid writing duplicates, proceeds to setup only when config document is not present.
-        :param args:
-        :param kwargs:
-        :return:
-        """
-
-        # TODO: we should only do this once, not everytime
-        _setup_couchdb()
-        return f(*args, **kwargs)
-    return setup
