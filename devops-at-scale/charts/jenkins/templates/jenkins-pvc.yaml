@@ -5,12 +5,15 @@ metadata:
   name: "{{.Release.Name}}-jenkins-pvc"
   namespace: {{ .Values.global.NameSpace }}
   annotations:
+    {{- if .Values.StorageClass}}
     volume.beta.kubernetes.io/storage-class: "{{ .Values.StorageClass }}"
+    {{- end }}
     trident.netapp.io/reclaimPolicy: "Retain"
     trident.netapp.io/exportPolicy: "default"
 spec:
+  # use 'ReadWriteMany' if there is a need to parallelize the builds (multiple Jenkins agents running parallel)
   accessModes:
-    - "ReadWriteMany"
+    - "ReadWriteOnce"
   resources:
     requests:
       storage: "{{ .Values.persistence.volumeSize }}"

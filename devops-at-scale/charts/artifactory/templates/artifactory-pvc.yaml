@@ -6,12 +6,14 @@ metadata:
   name: "{{ .Release.Name }}-artifactory-pvc"
   namespace: {{ .Values.global.NameSpace }}
   annotations:
-    volume.beta.kubernetes.io/storage-class: "{{ .Values.StorageClass }}"
     trident.netapp.io/reclaimPolicy: "Retain"
     trident.netapp.io/exportPolicy: "default"
+    {{- if .Values.StorageClass}}
+    volume.beta.kubernetes.io/storage-class: "{{ .Values.StorageClass }}"
+    {{- end }}
 spec:
   accessModes:
-    - "ReadWriteMany"
+    - "ReadWriteOnce"
   resources:
     requests:
       storage: "{{ .Values.persistence.volumeSize }}"

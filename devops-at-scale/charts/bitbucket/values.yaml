@@ -3,3 +3,5 @@ image:  atlassian/bitbucket-server:5.12.0
 imagePullPolicy: Always
 persistence:
   volumeSize: "10000M"
+# Assigns PVCs to default storage class when not specified
+StorageClass: ""

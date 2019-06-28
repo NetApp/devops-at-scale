@@ -6,10 +6,12 @@ metadata:
   name: "{{.Release.Name}}-docker-registry-pvc"
   namespace: {{ .Values.global.NameSpace }}
   annotations:
-    volume.beta.kubernetes.io/storage-class: ""
+    {{- if .Values.StorageClass}}
+    volume.beta.kubernetes.io/storage-class: "{{ .Values.StorageClass }}"
+    {{- end }}
 spec:
   accessModes:
-    - "ReadWriteMany"
+    - "ReadWriteOnce"
   resources:
     requests:
       storage: "{{ .Values.persistence.ontap.volumeSize }}"
