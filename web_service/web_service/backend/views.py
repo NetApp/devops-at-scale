@@ -31,16 +31,15 @@ backend_blueprint = Blueprint(
 '''
 
 
-@backend_blueprint.before_app_first_request
-def setup():
-    print("Before First request, calling one time couchDB setup")
-    helpers.onetime_setup_required()
-    response_object = {
-        'status': 'success',
-        'message': 'One time setup for Devops@Scale has been completed!'
-
-    }
-    return jsonify(response_object), 200
+# @backend_blueprint.before_app_first_request
+# def setup():
+#     helpers.onetime_setup_required()
+#     response_object = {
+#         'status': 'success',
+#         'message': 'One time setup for Devops@Scale has been completed!'
+#
+#     }
+#     return jsonify(response_object), 200
 
 
 @backend_blueprint.route('/backend/', methods=['GET'])
@@ -143,13 +142,13 @@ def _populate_workspace_details(workspace, input_form, config, merge):
     # IDE deployment details
     workspace['pod_image'] = config['workspace_pod_image']
     workspace['build_cmd'] = "No build commands have been specified for this project"
-    workspace['service_type'] = config['services_type']
+    workspace['service_type'] = config['service_type']
 
 
 def _complete_kubernetes_setup_for_workspace(workspace, merge=False):
     try:
-        kube = KubernetesAPI()
-        kube_pvc_pod_response = kube.create_pvc_and_pod(workspace, merge)
+        kube = KubernetesAPI.get_instance()
+        kube_pvc_pod_response = kube.create_pvc_clone_and_pod(workspace, merge)
     except Exception as exc:
         logging.error("Unable to create Kubernetes Workspace PVC/Pod: %s" % traceback.format_exc())
         raise GenericException(500, "Unable to create Kubernetes Workspace PVC/Pod")
@@ -176,8 +175,8 @@ def _complete_kubernetes_setup_for_workspace(workspace, merge=False):
     git_user_cmd = 'git config --global user.name %s' % request.form['username']
     git_email_cmd = 'git config --global user.email %s' % workspace['user_email']
     try:
-        kube.execute_command_in_pod(workspace['pod'], 'default', git_user_cmd)
-        kube.execute_command_in_pod(workspace['pod'], 'default', git_email_cmd)
+        kube.execute_command_in_pod(workspace['pod'], git_user_cmd)
+        kube.execute_command_in_pod(workspace['pod'], git_email_cmd)
     except:
         logging.warning("WARNING: Unable to configure GIT Username/Email on behalf of user: %s" %
                         traceback.format_exc())
@@ -193,6 +192,7 @@ def _record_new_workspace(db, workspace, merge=False):
                                     uid=workspace['uid'],
                                     gid=workspace['gid'],
                                     source_pvc=workspace['source_pvc'],
+                                    pipeline_pvc=workspace['pipeline_pvc'],
                                     build_name=workspace['build_name'],
                                     pod=workspace['pod'],
                                     pvc=workspace['pvc'],
@@ -277,11 +277,11 @@ def workspace_create():
         required: false
         description: username
         type: string
-     - in: path
-       name: pipeline-name
-       required: true
-       description: pipeline name of the SCM project
-       type: string
+      - in: path
+        name: pipeline-name
+        required: true
+        description: pipeline name of the SCM project
+        type: string
     responses:
       200:
         description: workspace created successfully
@@ -340,7 +340,7 @@ def workspace_merge():
     # Destination ws will be mounted at /workspace/git
     merge_cmd = '/usr/local/bin/build_at_scale_merge.sh /source_workspace/git /workspace/git'
     try:
-        response = KubernetesAPI().execute_command_in_pod(workspace['pod'], 'default', merge_cmd)
+        response = KubernetesAPI.get_instance().execute_command_in_pod(workspace['pod'], merge_cmd)
     except:
         logging.error("Unable to successfully complete git merge !" % traceback.format_exc())
         raise GenericException(500, "Unable to successfully complete merge!. Please contact your administrator")
@@ -407,14 +407,13 @@ def workspace_purge():
     ---
     tags:
       - workspace
-    parameters:
-
     responses:
       200:
         description: workspaces have been purged successfully
 
     """
     count, purged_workspaces = workspace_obj.purge_old_workspaces()
+    print("Got count and purged_workspaces", str(count))
     response = {'code': 200,
                 'resource': 'purge',
                 'customer_instance': app.config['DATABASE_NAME'],
@@ -481,9 +480,12 @@ def pipeline_create():
     }
 
     # Create PVC. Once we create a Kube PVC, Trident creates an ONTAP volume and a PV for this PVC
-    kube = KubernetesAPI()
+    kube = KubernetesAPI.get_instance()
     vol_size = "10000"  # set default vol size to 10Gig, 10000 in MB
-    storage_class = config.get('storage_class', 'basic')  # set default storage class if not specified
+    # TODO: Change this to default SC from Kube -- list_all_storage_classes and read annotations to find default
+    storage_class = config.get('storage_class')
+    if storage_class == '':
+        storage_class = None  # Don't set SC if SC is not passed in Helm, so that Kube can use the default storage class
     pvc_response = kube.create_pvc_resource(vol_name=pipeline['name'],
                                             vol_size=vol_size,
                                             storage_class=storage_class)
@@ -495,6 +497,7 @@ def pipeline_create():
     pipeline_job['volume_claim_name'] = pvc_response['name']
     pipeline_job['scm_url'] = request.form['scm-url']
     pipeline_job['scm_branch'] = request.form['scm-branch']
+    pipeline_job['kube_namespace'] = config['kube_namespace']
 
     # TODO: should this volume_name be populated as part of pvc_response? -
     #  but might want to handle if PVC creation has failed in KubernetesAPI.py
@@ -506,6 +509,7 @@ def pipeline_create():
         pipeline_job['scm_volume_claim'] = kube.get_kube_resource_name(config['scm_volume'], 'pvc')
 
     purge_job = helpers.set_jenkins_job_params('trigger-purge')  # setup params for Jenkins purge job
+    purge_job['kube_namespace'] = config['kube_namespace']
 
     # Create Jenkins CI and purge jobs for this pipeline
     try:
@@ -516,6 +520,7 @@ def pipeline_create():
         jenkins_job_url = jenkins.create_job(job_name=pipeline['name'], params=pipeline_job, form_fields=request.form)
         jenkins.create_job(job_name='purge_policy_enforcer', params=purge_job, form_fields=None)
     except Exception as exc:
+        traceback.print_exc()
         raise GenericException(500, "Jenkins Job Creation Error: %s" % str(exc))
 
     # Complete gathering pipeline details
@@ -552,7 +557,6 @@ def pipeline_delete():
         required: true
         description: Name of the pipeline to be deleted
         type: string
-
     responses:
       200:
         description:  Pipeline has been deleted successfully
@@ -566,11 +570,18 @@ def pipeline_delete():
     # 1. Validate input form parameters
     _validate_input_form_params(request.form, ['pipeline-name'])
 
+    # Don't delete pipeline if there are one or more workspaces associated with it
+    ws_exists, workspaces = helpers.check_if_workspaces_exist_for_pipeline(request.form['pipeline-name'])
+    if ws_exists:
+        raise GenericException(500, "One or more workspaces for this pipeline %s exist."
+                                    "Please re-try after deleting the following workspaces %s."
+                                    % (request.form['pipeline-name'], workspaces))
+
     try:
         helpers.delete_pipeline(request.form['pipeline-name'])
     except Exception as exc:
-        logging.error("Unable to delete project: %s" % traceback.format_exc())
-        raise GenericException(500, "Unable to delete project %s :: %s" % (request.form['pipeline-name'], str(exc)))
+        logging.error("Unable to delete pipeline: %s" % traceback.format_exc())
+        raise GenericException(500, "Unable to delete pipeline %s :: %s" % (request.form['pipeline-name'], str(exc)))
 
     response_object = {
         'status': 'success',
@@ -624,7 +635,8 @@ def volume_claim_clone():
                                "Invalid build_status type parameter: accepted values - 'passed', 'failed', 'N/A'")
 
     # TODO: this name should be created in KubernetesAPI, but currently will impact create_pvc_and_pod()
-    kube = KubernetesAPI()
+    kube = KubernetesAPI.get_instance()
+
     pvc_clone_name = kube.get_kube_resource_name(request.form['pvc_clone_name'], 'pvc')
     status = kube.create_pvc_clone_resource(
         clone=pvc_clone_name, source=request.form['pvc_source_name'])
@@ -641,8 +653,9 @@ def volume_claim_clone():
                             # TODO: Why do we need volume? Also, this is not the clone volume name,
                             #  but the parent pipeline volume name which we use later for only querying.
                             #  Reflect key-name appropriately
-                            #  If we dont need volume_name, we can replace this with parent_pipeline_pvc_name
+                            parent_pipeline_pvc=request.form['pvc_source_name'],
                             volume=request.form['volume_name'],
+                            pvc=pvc_clone_name,
                             jenkins_build=request.form['jenkins_build'],
                             build_status=build_status)
     snapshot_doc.store(db_connect)
@@ -675,7 +688,7 @@ def build_clones_list(pipeline_name):
                                GenericException.DB_CONFIG_DOC_NOT_FOUND,
                                "Database Exception")
     # volume_name = helpers.get_volume_name_for_pipeline(pipeline_name)
-    build_clones = helpers.get_all_builds_for_pipeline(pipeline_name)
+    build_clones = helpers.get_all_builds_with_status_for_pipeline(pipeline_name)
     return jsonify(build_clones)
 
 
@@ -822,7 +835,7 @@ def storage_service_level_modify():
       - in: body
         name: ssl_name
         required: true
-        description: Name of the ssl to be applied: [performance, extreme, value]
+        description: Name of the ssl to be applied [performance, extreme, value]
         type: string
     responses:
       200:

@@ -17,6 +17,7 @@ class Workspace(Document):
     build_name = TextField()
     pvc = TextField()
     source_pvc = TextField()
+    pipeline_pvc = TextField()
     service = TextField()
     pod = TextField()
     pv = TextField()

@@ -27,26 +27,32 @@ class Configuration(Document):
 
     # JENKINS
     jenkins_service_name = TextField()
+    jenkins_pvc_name = TextField()
     jenkins_url = TextField()
     jenkins_user = TextField(default="admin")
     jenkins_pass = TextField(default="admin")
 
     # Database CouchDB
     database_service_name = TextField()
+    database_pvc_name = TextField()
 
     # Artifactory
     registry_service_name = TextField()
+    registry_pvc_name = TextField()
     registry_type = TextField(default="artifactory")
 
     # Webservice
     web_service_name = TextField()
+    web_pvc_name = TextField()
     web_service_url = TextField()
     web_service_username = TextField(default="admin")
     web_service_password = TextField(default="admin")
 
-    # Others
-    services_type = TextField(default='NodePort')
-    devops_at_scale_version = TextField(default='1.1')
+    # Kube specifics
+    service_type = TextField()
+    kube_namespace = TextField(default='default')
+    devops_at_scale_version = TextField(default='1.2')
+    storage_class = TextField()
 
     # User Workspace
     workspace_pod_image = TextField(default="theiaide/theia-python:0.4.0-next.6243fc63")
