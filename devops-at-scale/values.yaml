@@ -1,8 +1,8 @@
 global:
   # "LoadBalancer" or "NodePort"
   ServiceType: NodePort
-  # Kubernetes Namespace
-  NameSpace: default 
+  # Set the NameSpace field to desired Kubernetes namespace. Defaults to 'default' namespace
+  NameSpace: default
   scm:
     # "gitlab" or "bitbucket"
     type: "gitlab"

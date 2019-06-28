@@ -2,7 +2,8 @@
 persistence:
   volumeSize: "10000M"
 
-StorageClass: "basic"
+# Assigns PVCs to default storage class when not specified
+StorageClass: ""
 
 
 Master:

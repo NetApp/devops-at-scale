@@ -3,4 +3,5 @@ image: docker.bintray.io/jfrog/artifactory-oss:latest
 imagePullPolicy: Always
 persistence:
   volumeSize: "10000M"
-StorageClass: "basic"
+# Assigns PVCs to default storage class when not specified
+StorageClass: ""

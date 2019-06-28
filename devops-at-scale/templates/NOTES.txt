@@ -21,7 +21,7 @@ If using the LoadBalancer service type , set $SERVICE_URL to the EXTERNAl_IP of 
 2) Then visit the $SERVICE_URL using your web browser to begin using DevOps@Scale
 
 
-Please see https://build-at-scale.readthedocs.io/en/latest/ for more information on DevOps@Scale
+Please see https://devops-at-scale.readthedocs.io/en/latest/ for more information on DevOps@Scale
 
 
 Notes:
