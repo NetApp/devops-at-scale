@@ -78,7 +78,7 @@ This will validate whether the GitLab and Jenkins integration has been successfu
       :width: 100%
       :alt: Successful build trigger on git push
 
-Integrate BitBucket with Jenkins for automatic build triggers
+Integrate Bitbucket with Jenkins for automatic build triggers
 ----------------------------------------------------------------------------
 1. From the webservice dashboard, copy the Jenkins URL for the pipeline created
 
@@ -86,26 +86,26 @@ Integrate BitBucket with Jenkins for automatic build triggers
       :width: 100%
       :alt: Pipelines dashboard
 
-2. Open BitBucket from the webservice dashboard
+2. Open Bitbucket from the webservice dashboard
 
 .. code :: shell
 
-        http://<<$NODE_IP>>:<<BitBucket_service_port>>
+        http://<<$NODE_IP>>:<<Bitbucket_service_port>>
 
-3. Login to BitBucket using root/root_devopsatscale
+3. Login to Bitbucket using root/root_devopsatscale
 
 
-4. In the BitBucket project's repository, goto Repository Settings -> Hooks. Add the post hook plugin "Webhook to Jenkins for Bitbucket Server" and enable the same.
+4. In the Bitbucket project's repository, goto Repository Settings -> Hooks. Add the post hook plugin "Webhook to Jenkins for Bitbucket Server" and enable the same.
 
     .. figure:: images/bitbucket_jenkins_plugin.png
       :width: 100%
-      :alt: Create Webhook BitBucket
+      :alt: Create Webhook Bitbucket
 
 5. Complete the webhook settings by pasting the Jenkins URL from webservice dashboard and save the setup
 
     .. figure:: images/jenkins.png
       :width: 100%
-      :alt: Allow Push from BitBucket
+      :alt: Allow Push from Bitbucket
 
 6. Make sure the Poll SCM option is enabled in Jenkins project.
 Navigate to the pipeline's Jenkins URL from the webservice dashboard and goto the pipeline's project -> Configure
