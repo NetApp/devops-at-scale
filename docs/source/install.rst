@@ -206,6 +206,24 @@ Additionally, you may want to add env vars for the Jenkins container, and the JV
 Additional Configuration
 --------------------------------------
 
+**Create Initial Bitbucket Account**
+
+
+    An initial account has to be created on Bitbucket before starting to use it.
+
+    To create an account on Bitbucket, visit the following URL and sign up.
+
+    Please note that the account credentials for the account should be root (username) and root_devopsatscale (password)
+
+    .. code :: shell
+
+        http://<<$NODE_IP>>:<<Bitbucket_service_port>>
+
+
+    .. figure:: images/bitbucket.png
+        :width: 100%
+        :alt: Bitbucket
+
 **Create Initial GitLab User (Optional)**
 
 

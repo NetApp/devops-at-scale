@@ -14,6 +14,8 @@ Prerequisites
 
 .. note:: Please see https://kubernetes.io/docs/setup/ for kubernetes installation instructions. Please check Trident documentation for supported Kubernetes version.
 
+.. note:: Please ensure your Kubernetes cluster has a default storage class set up
+
 .. note:: Please ensure your Kubernetes cluster, ONTAP cluster, and Trident can communicate with each other and reside in secure network(s)
 
 .. note:: Please visit :ref:`reference` on how to use Ansible to automate Kubernetes cluster installation and setup
