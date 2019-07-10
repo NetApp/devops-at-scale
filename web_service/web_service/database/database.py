@@ -79,7 +79,7 @@ def create(host, user, password, database_name):
     new_configuration = Configuration(name='configuration')
     new_configuration.store(database)
     # create a default user for demonstration purposes
-    default_user = User(name='admin', uid=3, gid=3, email='admin@netapp.com')
+    default_user = User(name='admin', uid=1000, gid=1000, email='admin@netapp.com')
     default_user.store(database)
     return database
 

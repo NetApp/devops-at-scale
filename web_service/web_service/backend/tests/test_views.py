@@ -19,6 +19,7 @@ class ViewsTestCase(unittest.TestCase):
         with self.app.app_context():
             self.app.testing = True
         self.client = self.app.test_client()
+        # KubernetesAPI({'namespace': 'test', 'service_type': 'test_svc'})
 
     def tearDown(self):
         pass

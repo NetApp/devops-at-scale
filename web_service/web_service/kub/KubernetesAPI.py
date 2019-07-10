@@ -315,11 +315,18 @@ class KubernetesAPI:
             workspace['source_workspace_pv'] = self.get_pv_name_from_pvc(workspace['source_workspace_pvc'])
             logging.debug("KUBE source workspace PVC:: %s" % workspace['source_workspace_pvc'])
             logging.debug("KUBE source workspace PV:: %s" % workspace['source_workspace_pv'])
+        workspace['temp_pod_name'] = 'temp-pod-for-uid-gid' + workspace['name']
+        temp_pod = self.create_temporary_pod_to_change_uid_gid(workspace)
         body = self.create_pod_config(workspace)
         service_body = self.create_service_config(workspace)
         logging.debug("WORKSPACE DETAILS:::: %s" % str(workspace))
-
         try:
+            # create a temporary pod to set UID GID For workspace
+            self.api.create_namespaced_pod(self.namespace, temp_pod)
+            logging.info("Changing UID and GID for the workspace clone volume")
+            sleep(10)   # TODO: Change this to wait on pod status
+            # delete the temp pod
+            self.delete_pod(workspace['temp_pod_name'])
             self.api.create_namespaced_pod(self.namespace, body)
             self.api.create_namespaced_service(self.namespace, service_body)
             # TODO: move set_status to helper?
@@ -460,6 +467,62 @@ class KubernetesAPI:
 
         return pvc_config
 
+    # TODO: Refactor: Merge this and below create_pod_config to one method
+    def create_temporary_pod_to_change_uid_gid(self, workspace):
+        volumes = [
+            {
+                "name": workspace['pv_name'],
+                "persistentVolumeClaim": {
+                    "claimName": workspace['pvc']
+                }
+            },
+        ]
+        volume_mounts = [
+            {
+                "mountPath": "/workspace",
+                "name": workspace['pv_name']
+            },
+        ]
+        uid_gid = str(workspace['uid']) + ":" + str(workspace['gid'])
+        pod_config = {
+            "kind": "Pod",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": workspace['temp_pod_name']
+            },
+            "spec": {
+                "volumes": volumes,
+                "containers": [
+                    {
+                        "name": workspace['name'] + "-container",
+                        "image": workspace['pod_image'],
+                        "ports": [
+                            {
+                                "containerPort": 6000,
+                                "name": 'debug',
+                            }
+                        ],
+                        "volumeMounts": volume_mounts,
+                        "imagePullPolicy": 'Always',
+                    }
+                ],
+                "initContainers": [
+                    {
+                        # Having a security context with RunAsUser and fsGroup does not work for NFS mounts.
+                        # Use init containers to map UID GID w.r.t workspace ownership
+                        "command": [
+                            # for merge, though we have two workspace mounts, we need uid/gid on the primary workspace
+                            "chown", "-R", uid_gid, "/workspace"
+                        ],
+                        "name": "volume-mount-hack-for-uid-gid-mapping",
+                        "image": "busybox",
+                        "volumeMounts": volume_mounts
+                    }
+                ],
+            }
+        }
+        return pod_config
+
     def create_pod_config(self, workspace):
         ''' Generate dictionary to configure Pod creation '''
 
@@ -470,25 +533,12 @@ class KubernetesAPI:
                     "claimName": workspace['pvc']
                 }
             },
-            {
-                "name": "docker-sock-volume",
-                "hostPath": {
-                    "path": "/var/run/docker.sock",
-                    "type": ""
-                }
-
-            },
         ]
         volume_mounts = [
             {
                 "mountPath": "/workspace",
                 "name": workspace['pv_name']
             },
-            {
-                "mountPath": "/var/run/docker.sock",
-                "name": "docker-sock-volume"
-            },
-
         ]
         if 'source_workspace_name' in workspace:
             volumes.append({
@@ -501,7 +551,6 @@ class KubernetesAPI:
                 "mountPath": "/source_workspace",
                 "name": workspace['source_workspace_pv']
             })
-
         pod_config = {
             "kind": "Pod",
             "apiVersion": "v1",
@@ -512,6 +561,11 @@ class KubernetesAPI:
                 "name": workspace['pod']
             },
             "spec": {
+                # Run pod with developer UID and GID.
+                "securityContext": {
+                    "runAsUser": workspace['uid'],
+                    "runAsGroup": workspace['gid'],
+                },
                 "volumes": volumes,
                 "containers": [
                     {
