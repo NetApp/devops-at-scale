@@ -419,7 +419,6 @@ def workspace_purge():
 
     """
     count, purged_workspaces = workspace_obj.purge_old_workspaces()
-    print("Got count and purged_workspaces", str(count))
     response = {'code': 200,
                 'resource': 'purge',
                 'customer_instance': app.config['DATABASE_NAME'],
