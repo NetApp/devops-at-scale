@@ -22,7 +22,7 @@ def create_app():
 
     # Setup swagger documentation for our app
     app.config['SWAGGER'] = {
-        'title': 'Build@Scale API',
+        'title': 'DevOps@Scale API',
         'uiversion': 3
     }
     Swagger(app)

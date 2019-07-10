@@ -203,6 +203,8 @@ def _record_new_workspace(db, workspace, merge=False):
             new_ws_document.source_workspace_pvc = workspace['source_workspace_pvc']
         new_ws_document.store(db)
     except http.ResourceConflict as exc:
+        # If DB operation fails, delete workspace PVC created from previous step
+        KubernetesAPI.get_instance().delete_pvc(workspace['pvc'])
         raise GenericException(500,
                                "Error recording new workspace in the DB, please contact your administrator",
                                "Database Exception")
@@ -353,8 +355,12 @@ def workspace_merge():
                   "Please check the workspace for conflicts which need to be resolved"
         logging.warning("Response from workspace POD:: %s" % response)
     else:
+        # If pod operations fail, delete the workspace PVC and the DB document created from previous steps
+        KubernetesAPI.get_instance().delete_pvc(workspace['pvc'])
+        db = helpers.connect_db()
+        db.delete(workspace['name'])
         logging.error("Response from workspace POD:: %s" % response)
-        raise GenericException(500, "Unable to successfully complete merge ! , please contact your administrator")
+        raise GenericException(500, "Unable to successfully create a merged workspace! , please contact your administrator")
 
     return render_template('workspace_details.html', message=message,
                            ontap_volume_name=workspace['clone_name'], workspace_ide=workspace['ide']), 200
@@ -511,14 +517,18 @@ def pipeline_create():
     purge_job['kube_namespace'] = config['kube_namespace']
 
     # Create Jenkins CI and purge jobs for this pipeline
+    # If Jenkins connection fails, delete the Kube PVC created from previous step
     try:
         jenkins = JenkinsAPI(config['jenkins_url'], config['jenkins_user'], config['jenkins_pass'])
     except Exception as exc:
+        KubernetesAPI.get_instance().delete_pvc(pvc_response['name'])
         raise GenericException(500, "Jenkins connection error: %s" % str(exc))
+    # If job creation fails, delete the Kube PVC created from previous step
     try:
         jenkins_job_url = jenkins.create_job(job_name=pipeline['name'], params=pipeline_job, form_fields=request.form)
         jenkins.create_job(job_name='purge_policy_enforcer', params=purge_job, form_fields=None)
     except Exception as exc:
+        KubernetesAPI.get_instance().delete_pvc(pvc_response['name'])
         traceback.print_exc()
         raise GenericException(500, "Jenkins Job Creation Error: %s" % str(exc))
 
@@ -533,6 +543,9 @@ def pipeline_create():
         new_pipeline_document = Pipeline(**pipeline)
         new_pipeline_document.store(connect)
     except Exception as exc:
+        # If DB operation fails, delete the Jenkins pipeline job, purge job and Kube PVC created from previous step
+        jenkins.delete_job(pipeline['name'])
+        KubernetesAPI.get_instance().delete_pvc(pvc_response['name'])
         raise GenericException(500, "Error recording new project in the DB, please contact your administrator",
                                "Database Exception" + str(exc))
 

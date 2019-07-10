@@ -23,10 +23,10 @@ $(document).ready(function() {
 
   projectSelect.onchange = function() {
     // clear all existing selections, only when project changes
-    document.getElementById('git-repos-select').reset()
-    document.getElementById('git-branches-select').reset()
-    document.getElementById('scm-branch').reset()
-    document.getElementById('scm-url').reset()
+    document.getElementById('git-repos-select').value = ""
+    document.getElementById('git-branches-select').value = ""
+    document.getElementById('scm-branch').value = ""
+    document.getElementById('scm-url').value = ""
     var projectKey = projectSelect.options[projectSelect.options.selectedIndex].key
     var url = "/frontend/workspace/git-repositories/" + projectKey
     $.ajax({

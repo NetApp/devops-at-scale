@@ -20,7 +20,7 @@ DevOps-at-Scale is a Kubernetes based open source solution which provides:
 ### Prerequisites
 You will need the following setup, before installing the DevOps@Scale solution:
 * A running instance of a ONTAP Cluster
-* Kubernetes Cluster
+* Kubernetes Cluster with a default Storage class setup
 * NetApp Trident running on Kubernetes cluster
 * Helm package manager (to install the solution)
 
@@ -35,4 +35,14 @@ Once the above mentioned pre-requisites are met, download the code and follow th
 Start using the solution for Pipeline management operations, and workspace management operations. Detailed step by step instructions [here](https://devops-at-scale.readthedocs.io/en/latest/usage.html)
 
 ## Documentation
-https://devops-at-scale.readthedocs.io
+
+For more detailed instructions:
+* [DevOps@Scale pre-requisites](https://devops-at-scale.readthedocs.io/en/latest/prerequisites.html)
+* [Installation and setup](https://devops-at-scale.readthedocs.io/en/latest/install.html)
+* [Usage](https://devops-at-scale.readthedocs.io/en/latest/usage.html)
+* [Uninstall](https://devops-at-scale.readthedocs.io/en/latest/uninstall.html)
+* [References](https://devops-at-scale.readthedocs.io/en/latest/references.html)
+* [Support](https://devops-at-scale.readthedocs.io/en/latest/support.html)
+* [License](https://devops-at-scale.readthedocs.io/en/latest/license.html)
+* [Release Notes](https://devops-at-scale.readthedocs.io/en/latest/release_notes.html)
+

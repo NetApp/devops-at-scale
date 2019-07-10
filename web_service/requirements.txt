@@ -4,9 +4,11 @@ Flask-SQLAlchemy
 Flask-Testing
 requests
 kubernetes
-flasgger
 jenkinsapi
 config
 couchdb
 flask_caching
 netapp-lib
+flasgger
+marshmallow
+apispec==0.38.0

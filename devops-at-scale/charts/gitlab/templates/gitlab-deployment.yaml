@@ -16,6 +16,7 @@ spec:
       labels:
         app: {{ .Chart.Name }}
     spec:
+      hostname: {{ .Chart.Name }}
       containers:
         - name: {{.Release.Name}}-gitlab
           image: {{ .Values.image }}

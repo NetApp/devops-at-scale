@@ -2,7 +2,7 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: {{ .Release.Name }}-bitbucket-svc
+  name: {{ .Release.Name }}-bitbucket
   namespace: {{ .Values.global.NameSpace }}
   labels:
     app: {{ .Chart.Name }}
