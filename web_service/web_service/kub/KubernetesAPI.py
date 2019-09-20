@@ -20,21 +20,34 @@ class KubernetesAPI:
 
     def __init__(self, specs):
         if KubernetesAPI.__kube_instance is not None:
-            raise Exception('Only one instance of the "%s" class is allowed per deployment' % self.__class__.__name__)
-        else:
-            KubernetesAPI.__kube_instance = self
-        # init will be called only once per deployment
+            # init will be called only once per deployment
+            # unless setup() did not complete with success
+            logging.error('Only one instance of the "%s" class is allowed per deployment' % self.__class__.__name__)
+            if KubernetesAPI.__kube_instance.init_complete:
+                return
+            # previous singleton was not initialized properly, get rid of it
+            del(KubernetesAPI.__kube_instance)
+
+        KubernetesAPI.__kube_instance = self
+        self.init_complete = False
+
         try:
             config.load_incluster_config()
-        except:
+        except Exception as exc:
             # this means this web_service instance is not running within cluster
-            config.load_kube_config()
+            logging.warning('Cannot retrieve Kubernetes cluster config: %s' % str(exc))
+            try:
+                config.load_kube_config()
+            except Exception as exc:
+                logging.error('Cannot retrieve Kubernetes local config: %s' % str(exc))
+                raise exc
 
         client.configuration.verify_ssl = False
         self.api = client.CoreV1Api()
         self.namespace, self.service_type = None, None
         for key in specs:
             setattr(self, key, specs[key])
+        self.init_complete = True
 
     @staticmethod
     def get_instance():
@@ -106,18 +119,21 @@ class KubernetesAPI:
         size_to_bytes = int(vol_size) * 1024 * 1024
         kube_pvc = self.get_kube_resource_name(vol_name, 'pvc')
         pvc_status = self.create_pvc_with_sc(kube_pvc, size_to_bytes, storage_class)
+        phase = ""
+        counter = 0
         if pvc_status['code'] == 201:
             # wait for PVC to be ready!
-            phase = ""
-            counter = 0
             while phase != 'Bound' and counter < 60:
                 counter += 1
                 sleep(1)
                 # removed direct call to api.pvc_status
                 status = self.read_status("pvc", pvc_status['resource_name'])
                 phase = status.status.phase
-            pvc_status['time'] = counter
+        pvc_status['time'] = counter
         pvc_status['name'] = kube_pvc
+        pvc_status['phase'] = phase
+        if pvc_status['phase'] != 'Bound':
+            logging.error('Failed to create or bind PVC: %s, size=%s, sc=%s' % (repr(pvc_status), vol_size, storage_class))
         return pvc_status
 
     def get_kube_resource_name(self, name, resource):
@@ -212,10 +228,17 @@ class KubernetesAPI:
     def get_volume_name_from_pvc(self, pvc_name, vol_type='nfs'):
         pv_name = self.get_pv_name_from_pvc(pvc_name)
         pv_data = self.api.read_persistent_volume(pv_name)
-        volume_path = None
-        if vol_type == 'nfs':
-            volume_path = pv_data.spec.nfs.path
+        volume_path = '__UNKNOWN__'
+        logging.debug('PV: %s' % repr(pv_data.spec))
+        if pv_data.spec.csi is not None:
+            volume_source = pv_data.spec.csi.volume_attributes
+            if volume_source is not None:
+                volume_path = volume_source['internalName']
+        elif vol_type == 'nfs':
+            if pv_data.spec.nfs is not None:
+                volume_path = pv_data.spec.nfs.path
         # TODO: if volume_path is invalid, raise an exception
+        logging.debug('PV path: %s' % repr(volume_path))
 
         return os.path.basename(volume_path)
 
