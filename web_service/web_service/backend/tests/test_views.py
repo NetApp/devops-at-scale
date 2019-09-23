@@ -106,7 +106,7 @@ class ViewsTestCase(unittest.TestCase):
         mock_kube.return_value.get_volume_name_from_pvc.return_value = 'test_volume_name'
         mock_jenkins_api.return_value = True
         mock_kube.return_value.create_pvc_resource.return_value = {
-            'name': 'test-1-pvc', 'status': 'COMPLETED', 'code': 201,
+            'name': 'test-1-pvc', 'status': 'COMPLETED', 'code': 201, 'phase': 'Bound',
             'message': 'PVC test-1-pvc created successfully', 'error': '', 'resource': 'PVC'
         }
         new_project_data = {

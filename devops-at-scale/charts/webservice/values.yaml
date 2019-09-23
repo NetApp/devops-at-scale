@@ -1,5 +1,5 @@
 replicaCount: 1
-image: archana51189/devops-at-scale:1.2
+image: lonico/devops-at-scale:1.2.1
 imagePullPolicy: Always
 # Assigns PVCs to default storage class when not specified
 StorageClass: ""

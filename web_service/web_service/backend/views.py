@@ -496,6 +496,8 @@ def pipeline_create():
                                             storage_class=storage_class)
     if not helpers.verify_successful_response(pvc_response):
         raise GenericException(500, "Kubernetes PVC creation error")
+    if pvc_response['phase'] != 'Bound':
+        raise GenericException(500, "Kubernetes PVC cannot be bound")
 
     # setup params for Jenkins pipeline job
     pipeline_job = helpers.set_jenkins_job_params('ci-pipeline')
