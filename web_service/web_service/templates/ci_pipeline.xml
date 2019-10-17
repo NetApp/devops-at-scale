@@ -74,146 +74,144 @@
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="pipelines@2.53">
     <script>
-      // Helper Functions
+// Helper Functions
 
-      def generateTimeStamp() {
-        def now = new Date()
-        return now.format(&quot;yyyyMMddmmss&quot;, TimeZone.getTimeZone(&apos;UTC&apos;))
-      }
+def generateTimeStamp() {
+    def now = new Date()
+    return now.format(&quot;yyyyMMddmmss&quot;, TimeZone.getTimeZone(&apos;UTC&apos;))
+}
 
-      def replaceDashesAndPeriods(oldString) {
-        def newString = oldString
-        newString = newString.replaceAll(&apos;[.|-]&apos;,&apos;_&apos;)
-        return newString
-      }
+def replaceDashesAndPeriods(oldString) {
+    def newString = oldString
+    newString = newString.replaceAll(&apos;[.|-]&apos;,&apos;_&apos;)
+    return newString
+}
 
-      // Global Variables
+// Global Variables
 
-      def jobName = &quot;${JOB_NAME}&quot;
-      def jobNameNoUnderScores = jobName.replaceAll(&apos;_&apos;,&apos;-&apos;)
-      def pvcName =  &quot;${jobNameNoUnderScores}-pvc&quot;
-      def volumeMountPath = &apos;/mnt/&apos; + params.BUILDVOL
-      def podName =  &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
-      def podLabel = &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
-      def kubeNameSpace = "${KUBE_NAMESPACE}"
-      def gitDir = volumeMountPath + &apos;/git&apos;
-      def buildDir = gitDir
-      def sourceCodeURL = params.SOURCE_CODE_URL
-      def sourceCodeBranch = params.SOURCE_CODE_BRANCH
-      def gitVolume = params.SCM_VOLUME
-      def web_service_url = params.WEB_SERVICE_URL
-      def scmCloneName = &quot;&quot;
-      def ciCloneName = &quot;&quot;
-      def currentGitRevision = &quot;&quot;
-      def build_status = &quot;passed&quot;
+def jobName = &quot;${JOB_NAME}&quot;
+def jobNameNoUnderScores = jobName.replaceAll(&apos;_&apos;,&apos;-&apos;)
+def pvcName =  &quot;${jobNameNoUnderScores}-pvc&quot;
+def volumeMountPath = &apos;/mnt/&apos; + params.BUILDVOL
+def podName =  &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
+def podLabel = &quot;${jobNameNoUnderScores}-${BUILD_NUMBER}-pod&quot;
+def kubeNameSpace = "${KUBE_NAMESPACE}"
+def gitDir = volumeMountPath + &apos;/git&apos;
+def buildDir = gitDir
+def sourceCodeURL = params.SOURCE_CODE_URL
+def sourceCodeBranch = params.SOURCE_CODE_BRANCH
+def gitVolume = params.SCM_VOLUME
+def web_service_url = params.WEB_SERVICE_URL
+def scmCloneName = &quot;&quot;
+def ciCloneName = &quot;&quot;
+def currentGitRevision = &quot;&quot;
+def build_status = &quot;passed&quot;
 
-      echo &quot;Running CI Pipeline&quot;
-      echo &quot;Note: This Pipeline expects that a pvc with name ${pvcName} is available prior to running&quot;
+echo &quot;Running CI Pipeline&quot;
+echo &quot;Note: This Pipeline expects that a pvc with name ${pvcName} is available prior to running&quot;
 
-      // Define Kubernetes Pod that we will use for this job and mount Ontap Volume on this POD
-      // We need to mount /var/run/docker.sock for DIND builds (Docker in Docker)
-      podTemplate(name: podName, label: podLabel, namespace: kubeNameSpace,
-      volumes: [hostPathVolume(hostPath: &apos;/var/run/docker.sock&apos;, mountPath: &apos;/var/run/docker.sock&apos;),
-                persistentVolumeClaim(claimName: pvcName, mountPath: volumeMountPath, readOnly: false)],
-      containers: [
-          containerTemplate(
-              name: &apos;jnlp&apos;,
-              workingDir: &apos;/home/jenkins_slave_workspace&apos;,
-              image: &quot;${params.JENKINS_SLAVE_IMAGE}&quot;,
-              args: &apos;${computer.jnlpmac} ${computer.name}&apos;,
-              alwaysPullImage: true,
-          ), ]
+// Define Kubernetes Pod that we will use for this job and mount Ontap Volume on this POD
+// We need to mount /var/run/docker.sock for DIND builds (Docker in Docker)
+podTemplate(name: podName, label: podLabel, namespace: kubeNameSpace,
+            volumes: [
+                hostPathVolume(hostPath: &apos;/var/run/docker.sock&apos;, mountPath: &apos;/var/run/docker.sock&apos;),
+                persistentVolumeClaim(claimName: pvcName, mountPath: volumeMountPath, readOnly: false)
+            ],
+            containers: [
+                containerTemplate(
+                    name: &apos;jnlp&apos;,
+                    workingDir: &apos;/home/jenkins_slave_workspace&apos;,
+                    image: &quot;${params.JENKINS_SLAVE_IMAGE}&quot;,
+                    args: &apos;${computer.jnlpmac} ${computer.name}&apos;,
+                    alwaysPullImage: true,
+                ),
+            ]
 
-      )
-      {
-        node(&apos;master&apos;)
-        {
-              stage(&apos;Create SCM Clone using Trident&apos;)
-              {
-                def scmTrigger = currentBuild.rawBuild.getAction(hudson.plugins.git.RevisionParameterAction)
-                if (scmTrigger) {
-                  currentGitRevision = scmTrigger.commit
-                  gitRevShorthand = currentGitRevision.take(7)
-                  scmCloneName = gitRevShorthand + &apos;_&apos; + generateTimeStamp()
-                  sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.SCMVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.SCM_VOLUME} -F &apos;pvc_clone_name=${scmCloneName}&apos; -F &apos;type=scm&apos;&quot;
-                  echo &quot;CI PVC Clone created: ${scmCloneName}&quot;
-                }
-                else {
-                  echo &quot;Build not triggered by scm hook , skipping SCM snapshot creation&quot;
-                }
-              }
-        }
-
-      // Run Main CI Process on Pod
-          node(podLabel)
-          {
-              stage(&apos;Setup&apos;) {
-                  sh &quot;mkdir -p ${gitDir}&quot;
-                  echo &apos;Check if netapp volume is correctly mounted&apos;
-                  if (! fileExists(gitDir)) {
-                      error &quot;could not find ${gitDir}, check ONTAP volume is mounted!&quot;
-                  }
-
-              }
-              stage(&apos;Checkout&apos;) {
-                  if (params.RUN_CLEAN_BUILD) {
-                      echo &quot;Running Clean Build&quot;
-                      sh &quot;sudo rm -rf ${volumeMountPath}/*&quot;
-                  }
-
-                  dir (gitDir) {
-                       sh &apos;git config --global http.sslVerify false&apos;
-                       checkout([$class: &apos;GitSCM&apos;,
-                           branches: [[name: &quot;*/${sourceCodeBranch}&quot;]],
-			   doGenerateSubmoduleConfigurations: false,
-			   extensions: [[$class: &quot;LocalBranch&quot;, localBranch: &apos;**&apos;]],
-			   submoduleCfg: [],
-			   userRemoteConfigs: [[
-				url: &quot;${sourceCodeURL}&quot;
-			   ]]])
-                      currentGitRevision = sh(returnStdout: true, script: &apos;git rev-parse HEAD&apos;).trim()
-                      if (currentBuild.description)
-                          currentBuild.description  = currentBuild.description + &quot;\n&quot;
-                      else
-                          currentBuild.description = &quot;&quot;
-                      currentBuild.description = currentBuild.description + &quot;Commit: &quot; + currentGitRevision.take(7)
-                  }
-              }
-              stage(&apos;Build&apos;) {
-                  try {
-                    sh &quot;mkdir -p ${buildDir} || true&quot;
-                    dir(buildDir) {
-                        // Build commands should go here
-                        echo &apos;running build&apos;
-                    }
-                  }
-                  catch(Exception e) {
-                    build_status = &apos;failed&apos;
-                    println(&quot;Build Error: ${e.message}&quot;)
-                  }
-                  }
-              }
-          }
-
-      // Create Snapshot and add to Snapshot List
-      // This should all be done on master
-      // For getting started with Trident, we replace this step with creating a PVC Clone from the source Kube PVC
-
-          node(&apos;master&apos;) {
-
-              stage(&apos;Create CI Clone using Trident&apos;) {
+) {
+    node(&apos;master&apos;) {
+        stage(&apos;Create SCM Clone using Trident&apos;) {
+            def scmTrigger = currentBuild.rawBuild.getAction(hudson.plugins.git.RevisionParameterAction)
+            if (scmTrigger) {
+                currentGitRevision = scmTrigger.commit
                 gitRevShorthand = currentGitRevision.take(7)
-                ciCloneName = gitRevShorthand + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
-                sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.BUILDVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.BUILDVOL} -F &apos;pvc_clone_name=${ciCloneName}&apos; -F &apos;build_status=${build_status}&apos; -F &apos;type=ci&apos;&quot;
-                echo &quot;CI PVC Clone created: ${ciCloneName}&quot;
-              }
-              stage(&apos;Determine overall build status&apos;) {
-                if (build_status == &apos;failed&apos;) {
-                    sh &quot;exit 1&quot;
-                }
-              }
-          }
+                scmCloneName = gitRevShorthand + &apos;_&apos; + generateTimeStamp()
+                sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.SCMVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.SCM_VOLUME} -F &apos;pvc_clone_name=${scmCloneName}&apos; -F &apos;type=scm&apos;&quot;
+                echo &quot;CI PVC Clone created: ${scmCloneName}&quot;
+            } else {
+                echo &quot;Build not triggered by scm hook , skipping SCM snapshot creation&quot;
+            }
+        }
+    }
 
+    // Run Main CI Process on Pod
+    node(podLabel) {
+        stage(&apos;Setup&apos;) {
+            sh &quot;mkdir -p ${gitDir}&quot;
+            echo &apos;Check if netapp volume is correctly mounted&apos;
+            if (! fileExists(gitDir)) {
+                error &quot;could not find ${gitDir}, check ONTAP volume is mounted!&quot;
+            }
+        }
+        stage(&apos;Checkout&apos;) {
+            if (params.RUN_CLEAN_BUILD) {
+                echo &quot;Running Clean Build&quot;
+                sh &quot;sudo rm -rf ${volumeMountPath}/*&quot;
+            }
+
+            dir (gitDir) {
+                sh &apos;git config --global http.sslVerify false&apos;
+                checkout([
+                    $class: &apos;GitSCM&apos;,
+                    branches: [[name: &quot;*/${sourceCodeBranch}&quot;]],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[$class: &quot;LocalBranch&quot;, localBranch: &apos;**&apos;]],
+                                submoduleCfg: [],
+                                userRemoteConfigs: [[
+                                    url: &quot;${sourceCodeURL}&quot;
+                                ]]
+                ])
+                currentGitRevision = sh(returnStdout: true, script: &apos;git rev-parse HEAD&apos;).trim()
+                if (currentBuild.description)
+                    currentBuild.description  = currentBuild.description + &quot;\n&quot;
+                else
+                    currentBuild.description = &quot;&quot;
+                currentBuild.description = currentBuild.description + &quot;Commit: &quot; + currentGitRevision.take(7)
+            }
+        }
+        stage(&apos;Build&apos;) {
+            try {
+                sh &quot;mkdir -p ${buildDir} || true&quot;
+                dir(buildDir) {
+                    // Build commands should go here
+                    echo &apos;running build&apos;
+                }
+            }
+            catch(Exception e) {
+                build_status = &apos;failed&apos;
+                println(&quot;Build Error: ${e.message}&quot;)
+            }
+        }
+    }
+}
+
+// Create Snapshot and add to Snapshot List
+// This should all be done on master
+// For getting started with Trident, we replace this step with creating a PVC Clone from the source Kube PVC
+
+node(&apos;master&apos;) {
+
+    stage(&apos;Create CI Clone using Trident&apos;) {
+        gitRevShorthand = currentGitRevision.take(7)
+        ciCloneName = gitRevShorthand + &apos;_&apos; + BUILD_NUMBER + &apos;_&apos; + generateTimeStamp()
+        sh &quot;curl -X POST ${web_service_url}/backend/volumeclaim/clone -F pvc_source_name=${params.BUILDVOLCLAIM} -F jenkins_build=${BUILD_NUMBER} -F volume_name=${params.BUILDVOL} -F &apos;pvc_clone_name=${ciCloneName}&apos; -F &apos;build_status=${build_status}&apos; -F &apos;type=ci&apos;&quot;
+        echo &quot;CI PVC Clone created: ${ciCloneName}&quot;
+    }
+    stage(&apos;Determine overall build status&apos;) {
+        if (build_status == &apos;failed&apos;) {
+            sh &quot;exit 1&quot;
+        }
+    }
+}
     </script>
     <sandbox>false</sandbox>
   </definition>
